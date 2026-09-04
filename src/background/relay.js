@@ -285,6 +285,32 @@ export function sendRelayChat(text, { onDelta, signal } = {}) {
   });
 }
 
+// Hand the CURRENT panel conversation to Hermes as a chat session (quiet: no
+// deltas streamed — only the final acknowledgement comes back, with the
+// session key so the UI can tell the user where to continue).
+export function sendRelayContinue(text) {
+  return new Promise((resolve, reject) => {
+    if (!isRelayOpen()) {
+      reject(new Error("Hermes bridge offline."));
+      return;
+    }
+    const id = ++chatSeq;
+    chatPending.set(id, {
+      resolve: (msg) => {
+        if (msg.ok === false) resolve({ ok: false, error: msg.error || "hermes chat failed" });
+        else resolve({ ok: true, text: (msg.text || "").trim(), session: msg.session || null });
+      },
+    });
+    send({ t: "chat", id, text, quiet: true });
+  });
+}
+
+// Push the conversation transcript to the relay's artifact sink.
+export function sendRelayArtifact(convoId, markdown) {
+  if (!isRelayOpen()) return;
+  send({ t: "artifact", convoId, markdown });
+}
+
 // Tell the relay to start a fresh Hermes conversation (New Chat button).
 export function sendRelayNewChat() {
   if (!isRelayOpen()) return;

@@ -102,6 +102,7 @@ async function init() {
   els.input.addEventListener("blur", () => setTimeout(hideSlashMenu, 150));
   els.stop.addEventListener("click", () => send({ type: MSG.STOP_TASK }));
   els.newChat.addEventListener("click", newChat);
+  els.hermesHandoff.addEventListener("click", handoffToHermes);
   els.settings.addEventListener("click", () => chrome.runtime.openOptionsPage());
   if (els.setupLink) els.setupLink.addEventListener("click", (e) => { e.preventDefault(); chrome.runtime.openOptionsPage(); });
   document.querySelectorAll(".examples li").forEach((li) =>
@@ -144,6 +145,7 @@ function applyState(state) {
     els.empty.hidden = true;
     updateRecBanner();
   }
+  updateHandoffBtn();
 }
 
 function updateConfiguredUI(isConfigured) {
@@ -153,7 +155,7 @@ function updateConfiguredUI(isConfigured) {
   if (examples) examples.hidden = !isConfigured;
   els.input.placeholder = isConfigured
     ? "Ask about or act on this page…  ( / for saved prompts )"
-    : "Add a model in Settings to get started →";
+    : "Waiting for the Hermes bridge to supply a model…";
 }
 
 async function refreshConfigured() {
@@ -322,6 +324,7 @@ function newChat() {
   send({ type: MSG.NEW_CHAT }); // clear the worker's (persisted) conversation now
   els.messages.querySelectorAll(".msg, .tool-event, .perm-card, .thinking").forEach((n) => n.remove());
   els.empty.hidden = false;
+  updateHandoffBtn();
   newChatPending = true;
   current = null;
   pendingTools = [];
@@ -395,6 +398,29 @@ function setRunning(v) {
   els.send.hidden = v;
   if (v) setStatus("Working…");
   else clearStatus();
+  updateHandoffBtn();
+}
+
+// The Continue-in-Hermes chip only makes sense once a conversation exists and
+// nothing is running.
+function updateHandoffBtn() {
+  const hasConvo = !!els.messages.querySelector(".msg");
+  els.hermesHandoff.hidden = running || !hasConvo || !configured;
+}
+
+async function handoffToHermes() {
+  if (running) return;
+  els.hermesHandoff.disabled = true;
+  setStatus("Handing off to Hermes…");
+  const res = await send({ type: MSG.CONTINUE_IN_HERMES }).catch(() => null);
+  els.hermesHandoff.disabled = false;
+  if (res && res.ok) {
+    setStatus("Continued in Hermes" + (res.session ? " — session " + res.session : "") + ". Open Hermes to keep chatting.");
+  } else {
+    setStatus("Handoff failed: " + ((res && res.error) || "bridge offline?"));
+  }
+  setTimeout(clearStatus, 7000);
+  updateHandoffBtn();
 }
 
 // -------------------------------------------------------------------------

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.5] — 2026-09-03
+
+### Added
+- **Conversation artifacts.** Every panel conversation is mirrored to a markdown artifact at `$HERMES_HOME/artifacts/apollo-panel/apollo-<timestamp>.md` (override with `APOLLO_ARTIFACTS_DIR`) — one file per conversation, rewritten each turn so it's always the full latest transcript. Written on New Chat and on handoff.
+- **"↗ Continue in Hermes"** chip in the panel. One click hands the current conversation to Hermes as a real chat session (quiet `hermes chat --continue` that seeds the transcript) and toasts the session name — the "later conversation" path, paid only when wanted. The relay returns the session key and suppresses streaming deltas for the handoff.
+- Panel copy now reflects the Hermes-driven model: empty state / not-configured hint reference the Hermes bridge instead of the legacy Settings picker.
+
+### Notes
+- Direct-path messages never hit a Hermes chat (that was the old slow spawn path) — they're recorded as artifacts instead. Bridge-fallback messages still land in the `apollo-panel` Hermes session as before.
+
+
+
 All notable changes to **Apollo — Hermes-Driven Browser Agent** (fork of OpenSidekick) are documented here.
 
 Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: fork versions start at 0.2.0 (upstream was 0.1.7 at fork time).

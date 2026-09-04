@@ -8,7 +8,7 @@ import { runAgent } from "./agent.js";
 import { detachAll } from "./cdp.js";
 import { ensureContentScript } from "./tools.js";
 import { applyMigrations } from "./migrations.js";
-import { startRelay, isRelayOpen, isRelayConnecting, sendRelayChat, sendRelayNewChat, sendRelayChatAbort } from "./relay.js";
+import { startRelay, isRelayOpen, isRelayConnecting, sendRelayChat, sendRelayNewChat, sendRelayChatAbort, sendRelayContinue, sendRelayArtifact } from "./relay.js";
 
 // -------------------------------------------------------------------------
 // State
@@ -23,6 +23,7 @@ let pendingSeed = null; // task text queued by a context-menu action
 let recording = null; // { steps, tabId, startUrl, lastClickAt, lastUrl }
 let keepAliveTimer = null;
 let fallbackNotified = false; // toast once per fallback engagement (reset when a keyed provider ports in)
+let convoArtifactId = null; // current conversation's artifact file id (rotated on New Chat)
 
 // MV3 terminates an idle service worker after ~30s. While a task is running —
 // especially while we're parked awaiting the user's answer to a permission or
@@ -193,9 +194,14 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       return true;
     }
     case MSG.NEW_CHAT: {
+      pushArtifact(); // final record of the conversation being closed
       clearConversation().then(() => sendResponse({ ok: true }));
-      // Start a fresh Hermes conversation on the bridge too (fire and forget).
+      convoArtifactId = null; // next turn opens a fresh artifact file
       sendRelayNewChat();
+      return true;
+    }
+    case MSG.CONTINUE_IN_HERMES: {
+      handleContinueInHermes().then(sendResponse);
       return true;
     }
     case MSG.STOP_TASK: {
@@ -260,6 +266,41 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Artifact handoff — the panel conversation is ALSO a durable markdown record
+// (relay writes it to $HERMES_HOME/artifacts/apollo-panel/), and can be handed
+// to Hermes as a real chat session on demand (Continue in Hermes).
+// ---------------------------------------------------------------------------
+function artifactMarkdown() {
+  const lines = ["# Apollo panel conversation", "", "_Saved " + new Date().toISOString() + "_", ""];
+  for (const m of conversation) {
+    if (m.role === "user" && typeof m.content === "string" && m.content && !m.images && !m.internal) {
+      lines.push("## You\n\n" + m.content + "\n");
+    } else if (m.role === "assistant" && typeof m.content === "string" && m.content) {
+      lines.push("## Apollo\n\n" + m.content + "\n");
+    }
+  }
+  return lines.join("\n");
+}
+function pushArtifact() {
+  if (!conversation.length) return;
+  if (!convoArtifactId) convoArtifactId = "c" + Date.now().toString(36);
+  sendRelayArtifact(convoArtifactId, artifactMarkdown());
+}
+async function handleContinueInHermes() {
+  try {
+    if (!conversation.length) return { ok: false, error: "Nothing to continue yet — send a message first." };
+    pushArtifact();
+    const seed = "Continue the conversation below from Apollo's browser panel. Read it, reply with a one-line acknowledgment, and stay ready to continue it here.\n\n"
+      + artifactMarkdown();
+    const res = await sendRelayContinue(seed);
+    if (!res.ok) return { ok: false, error: res.error || "Hermes handoff failed." };
+    notify("Continued in Hermes", (res.session ? "Session " + res.session + " " : "") + "— open it in Hermes to keep the conversation going.");
+    return { ok: true, session: res.session || null };
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e) };
+  }
+}
 async function handleGetState() {
   const { config, provider } = await getActiveProvider();
   await ensureConversationLoaded();
@@ -383,6 +424,7 @@ async function handleRunTask(msg) {
       // Detach the debugger (removes the "debugging this browser" banner).
       await detachAll().catch(() => {});
       await persistConversation(); // survives worker restarts AND Chrome close
+      pushArtifact(); // mirror the transcript to the markdown artifact
       currentRun = null;
       if (!recording) stopKeepAlive(); // an active recording still needs it
       emit({ kind: "idle" });

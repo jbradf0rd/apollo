@@ -29,8 +29,8 @@
         <h1>Your browser, any model.</h1>
         <p>
           Ask me to read, summarize, or act on the current page. I can click,
-          type, navigate, and work across tabs — using whichever LLM you
-          configured.
+          type, navigate, and work across tabs — using the model you’ve
+          selected in Hermes.
         </p>
         <ul class="examples">
           <li data-example="Summarize this page in 5 bullet points.">Summarize this page in 5 bullets</li>
@@ -38,7 +38,7 @@
           <li data-example="Fill in my name as 'Alex Doe' in the form on this page, but do not submit it.">Fill a form (no submit)</li>
         </ul>
         <p id="not-configured" class="warn" hidden>
-          ⚠ No model configured yet. <a href="#" id="setup-link">Open Settings</a> to add one.
+          ⏳ Waiting for the Hermes bridge to supply a model — start it with <code>node bridge/relay.mjs</code>.
         </p>
       </div>
     </main>
@@ -82,6 +82,7 @@
       <div id="site-menu" class="site-menu" hidden></div>
       <div class="composer-row">
         <button type="button" id="context-hint" class="context-hint site-chip" title="Site rules for this page"></button>
+        <button type="button" id="hermes-handoff" class="context-hint site-chip" title="Save this conversation into Hermes as a chat session you can continue there" hidden>↗ Continue in Hermes</button>
         <div class="composer-buttons">
           <button type="button" id="stop-btn" class="stop-btn" hidden>■ Stop</button>
           <button type="submit" id="send-btn" class="send-btn">Send</button>

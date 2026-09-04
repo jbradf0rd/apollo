@@ -22,7 +22,7 @@
 
 import http from "node:http";
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { attachWs } from "./ws-server.mjs";
@@ -97,6 +97,31 @@ const HERMES_PROFILE = process.env.APOLLO_HERMES_PROFILE || "";
 const HERMES_MODEL = process.env.APOLLO_HERMES_MODEL || ""; // override (empty = follow config)
 const CHAT_MAX_MS = 420000;
 
+// ---- Artifact sink: panel conversations land here as markdown ---------------
+// One file per conversation (rotated when the extension starts a new chat),
+// overwritten each turn so the file is always the latest full transcript.
+function hermesHomeDir() {
+  return process.env.HERMES_HOME || path.join(os.homedir(), "AppData", "Local", "hermes");
+}
+const ARTIFACTS_DIR = process.env.APOLLO_ARTIFACTS_DIR || path.join(hermesHomeDir(), "artifacts", "apollo-panel");
+let artifactCurrent = null; // { convoId, file }
+function writeArtifact(msg) {
+  try {
+    if (!msg.convoId || typeof msg.markdown !== "string" || !msg.markdown) return;
+    if (!artifactCurrent || artifactCurrent.convoId !== msg.convoId) {
+      const d = new Date();
+      const p2 = (n) => String(n).padStart(2, "0");
+      const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
+      mkdirSync(ARTIFACTS_DIR, { recursive: true });
+      artifactCurrent = { convoId: msg.convoId, file: path.join(ARTIFACTS_DIR, `apollo-${stamp}.md`) };
+      log("artifact file:", artifactCurrent.file);
+    }
+    writeFileSync(artifactCurrent.file, msg.markdown, "utf8");
+  } catch (e) {
+    log("artifact write failed:", e.message);
+  }
+}
+
 function sendToExt(msg) {
   if (chatState.extConn && ext && ext.conn === chatState.extConn) send(ext.conn, msg);
 }
@@ -131,7 +156,7 @@ function handleChatMessage(conn, msg) {
         return send(conn, { t: "chat_res", id: msg.id, ok: false, error: "A chat is already running." });
       }
       chatState.busy = true;
-      runHermesChat(msg.id, String(msg.text || ""), conn);
+      runHermesChat(msg.id, String(msg.text || ""), conn, msg.quiet === true);
       return;
     }
     default:
@@ -139,7 +164,7 @@ function handleChatMessage(conn, msg) {
   }
 }
 
-function runHermesChat(id, text, conn) {
+function runHermesChat(id, text, conn, quiet) {
   // -Q: quiet one-shot — stdout carries ONLY the assistant's reply (no banners
   // or session summary), so deltas can stream straight to the panel.
   // No -p profile pin by default: the chat channel serves the BRIDGE FALLBACK
@@ -177,8 +202,9 @@ function runHermesChat(id, text, conn) {
       .replace(/\r/g, "")
       .replace(/⚠️\s*Normalized model[^\n]*\n?/g, "");
     stdout += chunk;
-    // Forward as it arrives — the panel can stream the reply live.
-    sendToExt({ t: "chat_delta", id, text: chunk });
+    // Forward as it arrives — the panel can stream the reply live. Quiet
+    // mode (Continue-in-Hermes handoff) suppresses deltas; only the final res.
+    if (!quiet) sendToExt({ t: "chat_delta", id, text: chunk });
   });
   child.stderr.on("data", (d) => {
     stderr += d.toString("utf8");
@@ -318,6 +344,9 @@ function handleMessage(conn, raw) {
   switch (msg.t) {
     case "ping":
       return send(conn, { t: "pong" });
+    case "artifact":
+      writeArtifact(msg);
+      return;
     case "chat":
     case "chat_new":
     case "chat_abort":

@@ -170,6 +170,7 @@ export const MSG = {
   RUN_TASK: "run_task",
   STOP_TASK: "stop_task",
   NEW_CHAT: "new_chat",
+  CONTINUE_IN_HERMES: "continue_in_hermes",
   PERMISSION_RESPONSE: "permission_response",
   PLAN_RESPONSE: "plan_response",
   RUN_SCHEDULED: "run_scheduled",
