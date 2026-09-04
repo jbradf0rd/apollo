@@ -413,15 +413,33 @@ async function handoffToHermes() {
   if (running) return;
   els.hermesHandoff.disabled = true;
   setStatus("Handing off to Hermes…");
-  const res = await send({ type: MSG.CONTINUE_IN_HERMES }).catch(() => null);
+  addSystemNote("↗ Handing this conversation to Hermes…");
+  // The relay spawns `hermes chat` (~20-25 s); cap the wait so the button can
+  // never hang silently.
+  const res = await Promise.race([
+    send({ type: MSG.CONTINUE_IN_HERMES }).catch(() => null),
+    new Promise((r) => setTimeout(() => r({ ok: false, error: "timed out after 60 s" }), 60000)),
+  ]);
   els.hermesHandoff.disabled = false;
   if (res && res.ok) {
-    setStatus("Continued in Hermes" + (res.session ? " — session " + res.session : "") + ". Open Hermes to keep chatting.");
+    addSystemNote(
+      "✓ Continued in Hermes" + (res.session ? " — session " + res.session : "") + ". Open Hermes to keep chatting."
+    );
   } else {
-    setStatus("Handoff failed: " + ((res && res.error) || "bridge offline?"));
+    addSystemNote("⚠ Handoff failed: " + ((res && res.error) || "bridge offline?"));
   }
   setTimeout(clearStatus, 7000);
   updateHandoffBtn();
+}
+
+// Append a persistent system note into the chat thread (not part of the agent
+// conversation — UI chrome only, so it never reaches the model or artifacts).
+function addSystemNote(text) {
+  const el = document.createElement("div");
+  el.className = "msg assistant";
+  el.innerHTML = renderMarkdown(text);
+  els.messages.appendChild(el);
+  scroll();
 }
 
 // -------------------------------------------------------------------------
