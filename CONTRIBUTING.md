@@ -1,6 +1,6 @@
-# Contributing to OpenSidekick
+# Contributing to Apollo
 
-Thanks for your interest! OpenSidekick is intentionally simple: plain ES modules,
+Thanks for your interest! Apollo (a fork of OpenSidekick, now Hermes-driven) is intentionally simple: plain ES modules,
 no build step, no runtime dependencies. That makes it easy to hack on.
 
 ## Getting set up

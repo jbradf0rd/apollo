@@ -1,11 +1,11 @@
 {
-  "name": "opensidekick",
-  "version": "0.1.0",
+  "name": "apollo-browser-agent",
+  "version": "0.2.4",
   "private": true,
   "type": "module",
   "description": "Open-source, provider-agnostic AI browser agent Chrome extension. Bring your own LLM.",
   "license": "MIT",
-  "homepage": "https://opensidekick.app",
+  "homepage": "https://github.com/jbradf0rd/openApollo",
   "scripts": {
     "icons": "node scripts/generate-icons.mjs",
     "check": "for f in $(git ls-files '*.js' '*.mjs'); do node --check \"$f\" || exit 1; done && echo 'all JS OK'",
@@ -18,7 +18,7 @@
     "promo": "node test/promo.mjs",
     "demo": "bash scripts/make-demo-gif.sh",
     "video": "node test/feature-video.mjs && bash scripts/make-feature-video.sh",
-    "zip": "rm -f opensidekick.zip && zip -r opensidekick.zip manifest.json src icons LICENSE -x '*.DS_Store'"
+    "zip": "rm -f apollo.zip && zip -r apollo.zip manifest.json src icons LICENSE -x '*.DS_Store'"
   },
   "devDependencies": {
     "playwright": "^1.61.1"

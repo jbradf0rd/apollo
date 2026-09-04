@@ -9,7 +9,7 @@ import { detectInjection, isSensitiveActionText, INJECTION_NOTE } from "./safety
 import { parsePlan, planToText, hostFromDomain } from "./plan.js";
 import { connectServer, listTools, callTool, closeSession, mcpToolName, flattenMcpContent } from "./mcp.js";
 
-const SYSTEM_PROMPT = `You are OpenSidekick, a browser assistant that can read and act on the web page the user is looking at, on their behalf, using tools.
+const SYSTEM_PROMPT = `You are Apollo, a browser assistant that can read and act on the web page the user is looking at, on their behalf, using tools.
 
 How to work:
 - To understand a page, call read_page. It returns interactive elements each with a numeric "ref". Act on elements by their ref.
@@ -291,7 +291,7 @@ export async function runAgent(deps) {
 
       // (C) Show the on-page activity indicator on the tab we're about to touch
       // (hidden momentarily for screenshots so it isn't captured).
-      const overlayLabel = "OpenSidekick: " + call.name.replace(/_/g, " ");
+      const overlayLabel = "Apollo: " + call.name.replace(/_/g, " ");
       const hideForShot = call.name === "take_screenshot";
       touchedTabs.add(focusedTabId);
       await setOverlay(focusedTabId, hideForShot ? "hide" : "show", overlayLabel);

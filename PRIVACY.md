@@ -1,8 +1,8 @@
-# Privacy Policy — OpenSidekick
+# Privacy Policy — Apollo
 
 _Last updated: 2026-07-03_
 
-OpenSidekick is a browser extension that runs entirely on your device. It has no
+Apollo (a fork of OpenSidekick) is a browser extension that runs entirely on your device. It has no
 backend server operated by the project and collects no analytics or telemetry.
 
 ## What data is handled
@@ -19,7 +19,7 @@ backend server operated by the project and collects no analytics or telemetry.
 
 The only network destination is the **provider endpoint you choose** (e.g.
 OpenRouter, OpenAI, Anthropic, Google, Groq, or a local model at
-`localhost`). OpenSidekick sends requests directly from your browser to that
+`localhost`). Apollo sends requests directly from your browser to that
 endpoint. The project's authors never receive your keys, prompts, or page data.
 
 Your chosen provider's own privacy policy governs what they do with the data you
@@ -50,4 +50,4 @@ machine at all.
 
 ## Contact
 
-Open an issue at https://github.com/esterhuizen/opensidekick for questions.
+Open an issue at https://github.com/jbradf0rd/openApollo (upstream: https://github.com/esterhuizen/opensidekick) for questions.

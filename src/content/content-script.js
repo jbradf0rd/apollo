@@ -1,4 +1,4 @@
-// OpenSidekick content script (NOT an ES module — runs in the page's isolated
+// Apollo content script (NOT an ES module — runs in the page's isolated
 // world). It reads the page into a compact, model-friendly representation and
 // executes actions (click / type / select / scroll) by stable "ref" ids.
 //
@@ -7,8 +7,8 @@
 
 (function () {
   "use strict";
-  if (window.__opensidekick_cs_loaded) return;
-  window.__opensidekick_cs_loaded = true;
+  if (window.__apollo_cs_loaded) return;
+  window.__apollo_cs_loaded = true;
 
   const MAX_ELEMENTS = 200;
   const MAX_TEXT = 8000;
@@ -81,8 +81,8 @@
     const nodes = document.querySelectorAll(selector);
     for (const el of nodes) {
       if (elements.length >= MAX_ELEMENTS) break;
-      // Never expose OpenSidekick's own on-page overlay to the model.
-      if (el.closest("#opensidekick-overlay")) continue;
+      // Never expose Apollo's own on-page overlay to the model.
+      if (el.closest("#apollo-overlay")) continue;
       if (!isVisible(el)) continue;
       const ref = ++refCounter;
       refMap.set(ref, el);
@@ -420,7 +420,7 @@
 
   function onRecClick(e) {
     const el = findInteractive(e.target);
-    if (!el || el.closest("#opensidekick-overlay")) return;
+    if (!el || el.closest("#apollo-overlay")) return;
     const tag = el.tagName.toLowerCase();
     // Clicking a text field just focuses it — the typing step already covers it.
     if (tag === "textarea" || (tag === "input" && /^(text|search|email|password|url|tel|number|)$/i.test(el.getAttribute("type") || ""))) return;
@@ -476,14 +476,14 @@
   // -------------------------------------------------------------------------
 
   function overlay(msg) {
-    const ID = "opensidekick-overlay";
+    const ID = "apollo-overlay";
     let el = document.getElementById(ID);
     if (msg.state === "hide") {
       if (el) el.remove();
       return { ok: true };
     }
     // Persistent marker (survives hide) so tools can confirm the overlay fired.
-    document.documentElement.setAttribute("data-opensidekick-shown", "1");
+    document.documentElement.setAttribute("data-apollo-shown", "1");
     if (!el) {
       el = document.createElement("div");
       el.id = ID;
@@ -518,7 +518,7 @@
       document.documentElement.appendChild(el);
     }
     const label = document.getElementById(ID + "-label");
-    if (label) label.textContent = msg.label || "OpenSidekick is working…";
+    if (label) label.textContent = msg.label || "Apollo is working…";
     return { ok: true };
   }
 

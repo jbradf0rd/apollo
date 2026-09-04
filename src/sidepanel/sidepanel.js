@@ -528,8 +528,8 @@ function showPermission(req) {
   const action = describeAction(req.toolName, req.args);
   const title = req.sensitive ? "⚠ Sensitive site" : req.newSite ? "New site — trust it?" : "Allow action?";
   const intro = req.newSite
-    ? `You're in <strong>only-allowed-sites</strong> mode and <span class="origin">${escapeHtml(req.origin)}</span> isn't on your list. OpenSidekick wants to <strong>${escapeHtml(action)}</strong> here.`
-    : `OpenSidekick wants to <strong>${escapeHtml(action)}</strong> on <span class="origin">${escapeHtml(req.origin)}</span>.`;
+    ? `You're in <strong>only-allowed-sites</strong> mode and <span class="origin">${escapeHtml(req.origin)}</span> isn't on your list. Apollo wants to <strong>${escapeHtml(action)}</strong> here.`
+    : `Apollo wants to <strong>${escapeHtml(action)}</strong> on <span class="origin">${escapeHtml(req.origin)}</span>.`;
   el.innerHTML = `
     <h3>${title}</h3>
     <p>${intro}</p>

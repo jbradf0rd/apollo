@@ -78,7 +78,7 @@ export function evaluate(toolName, url, config, sessionGrants) {
 
   const stored = config.sitePermissions[origin];
   if (stored === "block") {
-    return { decision: "block", reason: `You have blocked OpenSidekick on ${origin}.` };
+    return { decision: "block", reason: `You have blocked Apollo on ${origin}.` };
   }
 
   const sensitive = isSensitive(url);

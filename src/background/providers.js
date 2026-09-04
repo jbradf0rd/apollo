@@ -59,7 +59,7 @@ const TEST_IMAGE = {
 };
 
 /**
- * Empirically probe a model for the two capabilities OpenSidekick needs: tool
+ * Empirically probe a model for the two capabilities Apollo needs: tool
  * calling and vision. Runs three tiny live requests and reports what actually
  * happened — so it can't go stale as new models ship, and it works for any
  * provider (including local ones that expose no metadata).
@@ -155,8 +155,8 @@ function openaiHeaders(provider) {
   const h = { "content-type": "application/json" };
   if (provider.apiKey) h["authorization"] = `Bearer ${provider.apiKey}`;
   // OpenRouter attribution headers (harmless for other providers).
-  h["http-referer"] = "https://opensidekick.app";
-  h["x-title"] = "OpenSidekick";
+  h["http-referer"] = "https://github.com/jbradf0rd/openApollo";
+  h["x-title"] = "Apollo";
   return h;
 }
 

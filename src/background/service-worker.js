@@ -1,4 +1,4 @@
-// OpenSidekick background service worker (ES module).
+// Apollo background service worker (ES module).
 // Owns conversation state, routes messages between the side panel and the agent
 // loop, and mediates permission prompts.
 
@@ -100,7 +100,7 @@ async function clearConversation() {
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
   chrome.contextMenus.create({
-    id: "ask-opensidekick",
+    id: "ask-apollo",
     title: 'Ask Apollo about "%s"',
     contexts: ["selection"],
   });
@@ -161,7 +161,7 @@ async function reconcileAlarms() {
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   let task = null;
-  if (info.menuItemId === "ask-opensidekick" && info.selectionText) {
+  if (info.menuItemId === "ask-apollo" && info.selectionText) {
     task = `Regarding this selected text from the page:\n\n"""${info.selectionText}"""\n\nPlease help me with it.`;
   } else if (info.menuItemId === "summarize-page") {
     task = "Summarize the current page for me.";

@@ -1,195 +1,94 @@
 # Changelog
 
-All notable changes to OpenSidekick are documented here.
-The format is based on [Keep a Changelog](https://keepachangelog.com/).
+All notable changes to **Apollo — Hermes-Driven Browser Agent** (fork of OpenSidekick) are documented here.
 
-## [Unreleased]
+Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: fork versions start at 0.2.0 (upstream was 0.1.7 at fork time).
+
+## [0.2.4] — 2026-09-03
 
 ### Added
-
-- **Prompt history in the composer.** Press ↑ in the chat box to recall your
-  previous prompts (↓ moves back toward the newest; going past it restores
-  whatever you were typing). Recalled prompts are editable and run with Enter,
-  shell-style. History keeps the last 50 prompts, survives browser restarts,
-  and skips consecutive duplicates. Esc exits browsing. Arrows keep their
-  normal caret behavior while you're typing or moving within a multiline
-  prompt.
-- **Only-allowed-sites mode + a site trust chip** (user-requested). A new site
-  access setting (Settings → Site permissions) locks the agent down to domains
-  you trust: on any unlisted site it won't even *read* the page without asking
-  first — even in Auto mode — and the prompt doubles as the "trust this site"
-  toggle. The site chip under the chat box shows the current site's rule
-  (✓ allowed / ⛔ blocked / not allowed yet) and opens a two-click
-  trust / block / clear menu, no trip to Settings. Blocked sites refuse tools
-  outright; sensitive sites (banking, payments) still confirm per action even
-  when trusted; unattended scheduled runs decline prompts, so they simply won't
-  touch untrusted sites in this mode.
-
-- **"Test" button for a model (Settings → Providers).** Runs three tiny live
-  requests against the selected model and reports what actually happened —
-  ✓/⚠/✗ for **text**, **tool calling**, and **vision** — plus a plain-language
-  verdict ("This model can drive OpenSidekick"). Because it probes the real model
-  rather than a built-in list, it stays correct as new models ship and works for
-  any provider, including local ones with no metadata. Catches the common trap of
-  a vision model that has no tool-calling endpoint (e.g. some Qwen-VL endpoints)
-  before you hit it mid-task.
-- **"Need help choosing a model?" explainer in Settings.** A collapsible note in
-  the Providers section explains that the agent needs a model with **tool/function
-  calling** (required) and **vision** (recommended), warns about the traps (only a
-  specific family variant sees images; a vision model can still lack a tool-calling
-  endpoint), and lists **tested** picks that pass both — open models like
-  `qwen/qwen3-vl-30b-a3b-instruct`, `meta-llama/llama-4-maverick`,
-  `mistralai/mistral-small-3.2-24b-instruct`, `google/gemma-3-27b-it`, plus the
-  closed `openai/gpt-4o` — and points to the Test button for anything else.
-- **Approval selector under the chat box.** A one-click segmented control
-  (Plan / Ask / Auto) directly below the composer lets you switch autonomy mode
-  without opening Settings. It stays in sync with the Behavior setting both ways,
-  and the change applies to your next run.
+- **Hermes-bridge fallback for models with no browser key.** When Hermes's active model is unreachable from the browser (e.g. claude via an OAuth subscription — no portable API key exists), panel messages now route through the Hermes bridge (`hermes chat` on the active profile) instead of erroring or silently using a stale provider. Relay spawns `hermes chat` with **no `-p` profile pin**, so it follows the model Joe has active in Hermes, claude included.
+- **Bridge-fallback toast** (`chrome.notifications`): one-time "Bridge fallback" alert per engagement, explaining why the reply is slower; resets when a keyed provider ports back in.
+- `GET_STATE` now exposes `bridgeFallback`, `hermesPortNote`, `hermesActiveModel`, `hermesActiveProvider` for UI.
 
 ### Fixed
+- **Provider port now FOLLOWS Hermes's active model instead of being pinned to deepseek.** The port reads the *default* Hermes profile (what the user selects in their main chat) and maps `model.provider` to the extension's matching adapter. Previously it read a pinned profile (and before that, mixed the default profile's active model — e.g. claude-opus — with deepseek's endpoint, which the API rejected with HTTP 400).
+- `applyHermesProvider` stores the ported adapter `type` (anthropic vs openai); before, hardcoded `type: "openai"` would have sent claude through the wrong wire protocol.
+- Unreachable providers no longer leave a stale provider active: `handleRunTask` checks the port note **first**, so the panel never silently answers with a model Hermes isn't on.
+- YAML parsing of Hermes `config.yaml`: CRLF stripping + a block regex that captures all indented lines (the `$`-with-`m`-flag bug read only the first config line).
+- Hermes `config.yaml` provider/base_url written by model switches in the desktop app are now honored (the port reads the live config each time).
 
-- **Stale "Working…" / "Recording…" bars never cleared visually.** The status
-  bar and recording banner have `display:flex` in CSS, which overrides the HTML
-  `hidden` attribute — so hiding them set the property but they stayed on
-  screen (the "Working…" strip lingered after every task, and the recording
-  banner survived Stop). A global `[hidden] { display:none !important }` guard
-  fixes the whole class of bug; the e2e now asserts computed visibility instead
-  of the property.
+### Notes
+- `hermes chat --ignore-rules` does **not** work for the fallback (it breaks provider resolution — a `-m anthropic/claude-opus-4-8` request went to deepseek). Fallback latency is ~23–35 s (Hermes startup + MCP boot + model); direct keyed calls are ~1–8 s.
 
-- **Saved workflows no longer vanish.** The Settings page held its config
-  snapshot from page-load and wrote the *whole* object back on any change — so a
-  workflow saved (or a site permission granted, or an autonomy switch made)
-  while Settings was open in another tab got silently wiped by the next Settings
-  interaction. Settings now reloads and re-renders whenever another surface
-  writes the config.
-- **Recordings survive closing the side panel.** A finished-but-unsaved
-  recording is parked in session storage and the "Save this workflow?" card is
-  re-offered when the panel reopens; a recording still in progress keeps the
-  worker alive (previously Chrome could kill it ~30s into a quiet stretch and
-  lose the steps), and a reopened panel picks the live recording banner back up
-  with the current step count.
-- **The conversation now survives between prompts.** Chrome terminates the
-  extension's idle service worker ~30s after a task finishes, which wiped the
-  in-memory chat — so a follow-up like "ok do it" started from scratch with no
-  context. The conversation is now persisted to `chrome.storage.session`
-  (survives worker restarts, clears when Chrome closes) and restored on the next
-  prompt. Reopening the side panel also re-renders the ongoing chat, and
-  "+ New chat" clears the stored conversation immediately. Screenshots are
-  stripped from the persisted copy to stay inside the session-storage quota.
-  Also fixed the panel's first message after reopening silently starting a new
-  chat (it sent `newChat: true`), which wiped the restored conversation — the
-  panel now continues the chat; only the "+" button starts a fresh one.
-- **The "Recording…" banner no longer gets stuck after Stop.** Starting a
-  recording could take a moment (while the content script is injected) with no
-  visual feedback, so a quick second click spawned a second start whose late
-  reply re-showed the banner *after* you'd already stopped. The panel now shows
-  the recording state immediately and ignores a start that resolves after a stop,
-  so Stop always clears the banner. Covered by `test/recording.e2e.mjs`.
-- **Stop and slow permission answers no longer wedge the panel.** Chrome can
-  terminate the extension's service worker while the agent waits for you to
-  answer a permission prompt; a later "Allow" then landed on a fresh worker that
-  had lost the run, so nothing happened and Stop did nothing. The worker now
-  keeps itself alive for the duration of a run (including while awaiting a
-  prompt), and — as a backstop — Stop and any orphaned prompt answer always
-  reset the panel to idle.
-- **First run no longer gets stuck on "Working…".** Sending a message before a
-  model is connected now shows a clear "add a model" message and the side panel
-  returns to idle instead of hanging with a dead Stop button. Submitting with no
-  model configured opens Settings so you can connect one, and the composer
-  prompts you to do so.
-- **Inspecting a page that is itself an image** (a direct `.jpg`/`.png` URL) now
-  attaches the actual full-resolution image to the model instead of a viewport
-  screenshot of the picture floating on the browser's gray backdrop — much
-  clearer for the model to read. Non-image pages still use a screenshot.
-
-### Changed
-
-- **Vision is now on by default** (matches other browser agents). Screenshots are
-  still on-demand, so the model only captures the page when it needs to see. If a
-  text-only model rejects the screenshot, the agent now surfaces a clear hint to
-  switch models or disable vision, instead of a cryptic provider error.
+## [0.2.3] — 2026-09-03
 
 ### Added
-
-- **MCP tool servers:** connect remote Model Context Protocol servers (Streamable
-  HTTP transport) in Settings — the agent connects at task start, lists the
-  server's tools, exposes them (namespaced) alongside the browser tools, and
-  dispatches calls to the server. A minimal MCP client (`mcp.js`: initialize →
-  tools/list → tools/call, JSON + SSE responses, session header, optional bearer
-  auth), a "Test" button that lists a server's tools, and e2e coverage against a
-  mock MCP server (the model calls a remote `get_weather` tool and its result
-  flows back). Unit tests for the tool-name and content-flatten helpers.
-- **Workflow recording & replay:** a Record button in the side panel captures
-  your page actions (clicks, typing, selects, navigations) as human-readable
-  steps; save them as a named workflow and replay from the side panel's menu. The
-  content script records into steps, the worker manages recording state and
-  re-arms across navigations, and replay feeds the steps to the agent so it
-  re-runs them intelligently (not brittle click-replay). Manage/rename/delete
-  workflows in Settings. e2e-verified: recording captures real clicks/typing and
-  replay re-runs them.
-- **Saved prompts / slash commands:** store reusable prompts in Settings and
-  insert them by typing `/` in the side panel (autocomplete menu with keyboard
-  nav). Matching logic in a unit-tested `prompts.js`.
-- **Scheduled tasks:** run a prompt on a repeating schedule (`chrome.alarms`,
-  adds the `alarms` permission) while Chrome is open; optional start URL; result
-  delivered as a notification. Unattended runs use auto mode and decline
-  purchase/deletion confirmations for safety. "Run now" button in Settings.
-  Both e2e-verified (the slash menu via the real side panel; scheduled run-now
-  end to end).
-- **Vision (optional):** a `take_screenshot` tool + image support in the message
-  layer for both providers, so multimodal models can see the page. Gated by a
-  new "Enable vision" toggle in Settings.
-- **Fuller action set:** `hover_element`, `double_click`, `right_click`,
-  `drag_element` (pointer-based drag-and-drop), and `press_keys` (keyboard
-  shortcuts).
-- **Run-JavaScript escape hatch (optional):** a `run_javascript` tool that runs
-  code in the page via `chrome.scripting` (world MAIN). Opt-in; permission-gated.
-- **Developer tools (optional):** `read_console` and `read_network`, backed by
-  `chrome.debugger` (CDP). The debugger attaches lazily and detaches when the
-  task ends. Opt-in via a Settings toggle; declares the `debugger` permission.
-- **Plan-approval mode:** a third autonomy setting ("Plan first"). The agent
-  proposes a plan (summary + steps + the sites it expects to use) and waits for
-  approval before acting; approved sites then act without per-action prompts,
-  while any other site still prompts. Plan helpers live in a unit-tested
-  `plan.js`; e2e-verified end to end.
-- **Safety layer:**
-  - On-page activity indicator (glow + label + Stop button) shown while the agent
-    works and cleared when the task ends.
-  - Pre-action domain re-check: a mutating action is blocked if the page changed
-    origin since it was last read, with a warning to the user.
-  - Forced confirmation on purchase/delete/transfer-type clicks (by element
-    label) even in "auto" mode — never persisted, always re-prompts.
-  - Prompt-injection flagging: page content that looks like instructions aimed at
-    the agent is marked as untrusted in the tool result, and the user is warned.
-  - Unit tests for the injection + sensitive-action heuristics; e2e coverage for
-    all four behaviors in a real browser.
-- **Real-model e2e test** (`npm run test:real`) that drives the extension against
-  a live LLM via OpenRouter; verified end-to-end with gpt-4o-mini.
-- e2e coverage for vision, run_javascript, and CDP console/network (verified that
-  `chrome.debugger` attaches and captures real console + network events).
-- Unit coverage for image message shaping (OpenAI + Anthropic).
+- **Lean direct-model panel.** The side panel now runs OpenSidekick's own agent loop (`agent.js` + `providers.js`) talking **straight to the model** — no `hermes chat` subprocess per message. End-to-end panel latency dropped from ~80 s to under ~18 s (cloud) by removing the Hermes spawn, its full MCP boot, and a fat agent prompt from the chat path.
+- **Conversation persistence across Chrome close.** Chat moves from `chrome.storage.session` (clears when Chrome closes) to `chrome.storage.local`. Verified: the conversation survives panel close + reopen, and storage.local outlives a full Chrome restart by design. (This was the core "don't lose context like Claude for Chrome" requirement.)
+- **Hermes provider port.** `bridge/relay.mjs` reads Hermes's active provider/model/key and pushes it to the extension over the WebSocket on connect; the extension stores it as a `hermes` provider and the lean loop uses it. Dedupe prevents a save → `storage.onChanged` → re-register loop.
 
 ### Changed
+- `handleRunTask` → `getActiveProvider()` → `runAgent({…})` (direct path restored); scheduled tasks also use the lean loop.
+- Dedicated `apollo` Hermes profile introduced for the earlier spawn-based path; later superseded by the default-profile follow (see 0.2.4).
 
-- The side panel renders the user's message from the worker event, so runs
-  triggered by any entry point display consistently.
+### Fixed
+- `GET_STATE` reflects real provider presence (`configured`), not a hardcoded `true`.
 
-## [0.1.0] — 2026-07-03
+## [0.2.2] — 2026-09-03
 
-Initial release.
+### Changed
+- **Hermes-only mode.** Removed the stock model/provider machinery from the run path — the panel routed every message to Hermes over the bridge. Killed the settings-bounce bug class (fresh unpacked installs had no Web-Store key and bounced to Settings on every submit).
+
+### Fixed
+- `refreshConfigured()` in the side panel asks the worker (`GET_STATE`) instead of reading local storage (which clobbered the Hermes-aware state).
+- MV3 service-worker idle death: `startRelay()` runs at module top level on every worker spin-up, so the WebSocket reconnects after relay restarts without a Chrome restart.
+
+## [0.2.1] — 2026-09-03
 
 ### Added
+- **Side-panel chat routes to Hermes over the bridge.** The relay spawns a resumable `hermes chat` session (`--continue apollo-panel --create-if-missing`); replies stream back as deltas. The named Hermes session is the conversation record — resumable and searchable in Hermes.
+- `chat` / `chat_new` / `chat_abort` relay message types; extension chat channel with 60 s timeout.
 
-- Side-panel chat aware of the current page.
-- Agentic browser control: `read_page`, `get_page_text`, `click_element`,
-  `type_text`, `select_option`, `navigate`, `scroll`, `wait`, and multi-tab
-  tools (`list_tabs`, `open_tab`, `switch_tab`).
-- Provider-agnostic model layer with two protocols:
-  - OpenAI-compatible (`/chat/completions`) — OpenRouter, OpenAI, Google Gemini,
-    Groq, Together, DeepSeek, Ollama, LM Studio, and custom endpoints.
-  - Anthropic Messages API (direct-from-browser).
-- Streaming responses (SSE) with a live view of each tool action.
-- Per-site permission model (ask / auto) with hard guards on sensitive sites.
-- Options page for managing providers, keys, models, behavior, and site rules.
-- Context-menu actions: ask about a selection, summarize a page.
-- Dependency-free PNG icon generator.
+### Fixed
+- `-Q` quiet mode added to the Hermes spawn so stdout carries only the reply (banners/session trailers were leaking into the panel); relay strips ANSI.
+
+## [0.2.0] — 2026-09-03
+
+### Added
+- **Local bridge transport** (the architectural core of the fork): `bridge/ws-server.mjs` (zero-dependency RFC 6455 WebSocket server), `bridge/relay.mjs` (always-on daemon on `127.0.0.1:8765`, id-namespace translation, multiplexing), `bridge/mcp-server.mjs` (stdio MCP server Hermes spawns). e2e test suite (`bridge/test-relay.mjs`) — 6/6 pass without Chrome.
+- **Browser-tools MCP surface**: the extension registers its tools (17, settings-filtered) with the relay; a Hermes session sees them as `mcp_apollo_*` and can drive the real logged-in browser (read page, click, type, navigate, screenshot) — something stock OpenSidekick cannot do.
+- **Rebrand**: Apollo — Hermes-Driven Browser Agent; live green/red bridge badge on the toolbar icon; versioned 0.2.0.
+- `hermes mcp add apollo …` registration; 17/17 tools live.
+
+### Fixed
+- Relay bring-up bugs found by the no-Chrome e2e: `_emitText` double-emit, control replies shaped as `res` (not `tools`), call-id namespace collision leaving callers hanging, extension-close detection comparing wrapper vs raw connection, unhandled socket errors on teardown.
+
+## [0.1.7] — fork point
+
+Branched from upstream [esterhuizen/opensidekick](https://github.com/esterhuizen/opensidekick) at `96fa52a` (v0.1.7). All 0.1.x history belongs to the upstream project — see below.
+
+---
+
+## Upstream (OpenSidekick) history
+
+<details>
+<summary>OpenSidekick changelog (pre-fork, © its contributors)</summary>
+
+All notable changes to OpenSidekick are documented here. (Preserved verbatim from upstream for provenance.)
+
+The project is intentionally simple: a single agent loop that can read and act on
+the current page. Features are added only when the browser genuinely can't be
+replaced by an API. As a result it has no vector store, no "memory", no
+multi-agent orchestration — and therefore nothing to tune, cache-bust, or
+optimize away.
+
+### 0.1.7
+— (upstream history as of the fork point; see the upstream repository for the
+full changelog.)
+
+</details>
+
+## License
+
+MIT. Apollo © 2026 Joe Bradford (fork additions). OpenSidekick © 2026 its contributors. See [LICENSE](LICENSE).

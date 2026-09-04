@@ -1,4 +1,4 @@
-// Thin wrapper over chrome.storage.local for the OpenSidekick config object.
+// Thin wrapper over chrome.storage.local for the Apollo config object.
 // All secrets (API keys) live here, in the extension's local storage only —
 // they are never sent anywhere except directly to the provider endpoint the
 // user configured.
