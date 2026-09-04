@@ -309,7 +309,14 @@ async function handleRunTask(msg) {
   // fast and self-contained. Hermes still drives the browser via the MCP path.
   const { config, provider } = await getActiveProvider();
   if (!provider) {
-    emit({ kind: "error", error: "No model provider yet — start the Hermes bridge (node bridge/relay.mjs) and it will pull in Hermes's model." });
+    // Distinguish "bridge down" from "Hermes is on a model we can't reach".
+    const note = config && config.hermesPortNote;
+    if (note) {
+      const m = (config.hermesActiveModel || "the active model");
+      emit({ kind: "error", error: "Following Hermes: it's set to " + m + ", but " + note + " Switch Hermes to a keyed provider (deepseek/gemini/openai) or add that provider's API key to Hermes's .env." });
+    } else {
+      emit({ kind: "error", error: "No model provider yet — start the Hermes bridge (node bridge/relay.mjs) and it will pull in Hermes's model." });
+    }
     emit({ kind: "idle" });
     return { ok: false, error: "not-configured" };
   }

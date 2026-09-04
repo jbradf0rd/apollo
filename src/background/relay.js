@@ -311,6 +311,21 @@ async function applyHermesProvider(msg) {
     const baseUrl = msg.baseUrl || "";
     const apiKey = msg.apiKey || "";
     const model = msg.model || "";
+    const type = msg.type === "anthropic" ? "anthropic" : "openai";
+    const reachable = msg.reachable !== false; // default true if the relay omitted it
+
+    // If Hermes's active model has no portable key (e.g. claude via OAuth), we
+    // CANNOT call it directly from the browser. Record why so the panel can say
+    // so, and DON'T switch the active provider away from whatever still works.
+    if (!reachable) {
+      config.hermesPortNote = msg.reason || ("Hermes's active model '" + model + "' has no browser-usable API key.");
+      config.hermesActiveModel = model;
+      config.hermesActiveProvider = msg.provider || "";
+      await saveConfig(config);
+      console.warn("[apollo-relay] active Hermes model not directly reachable:", msg.provider, model, "-", msg.reason);
+      return;
+    }
+
     const cur = (config.providers || []).find((p) => p.id === id);
     // Dedupe: skip the write when nothing changed. This also breaks the
     // save → storage.onChanged → register → provider loop.
@@ -318,8 +333,10 @@ async function applyHermesProvider(msg) {
       cur &&
       cur.baseUrl === baseUrl &&
       cur.apiKey === apiKey &&
+      cur.type === type &&
       config.activeProviderId === id &&
-      config.activeModel === model
+      config.activeModel === model &&
+      !config.hermesPortNote
     ) {
       return;
     }
@@ -327,15 +344,18 @@ async function applyHermesProvider(msg) {
     providers.push({
       id,
       name: "Hermes (" + (msg.provider || "model") + ")",
-      type: "openai",
+      type,
       baseUrl,
       apiKey,
     });
     config.providers = providers;
     config.activeProviderId = id;
     config.activeModel = model;
+    delete config.hermesPortNote; // clear any stale "unreachable" note
+    config.hermesActiveModel = model;
+    config.hermesActiveProvider = msg.provider || "";
     await saveConfig(config);
-    console.log("[apollo-relay] ported Hermes model:", msg.provider, model);
+    console.log("[apollo-relay] ported Hermes model:", msg.provider, model, "(" + type + ")");
   } catch (e) {
     console.warn("[apollo-relay] provider apply failed:", e.message || e);
   }

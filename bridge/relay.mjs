@@ -206,57 +206,87 @@ function runHermesChat(id, text, conn) {
   child.stdin.end();
 }
 
-// Read Hermes's ACTIVE model/provider so the extension's lean panel agent can
-// talk straight to the same model — no Hermes process in the chat path. Reads
-// config.yaml (provider/default) + .env (the API key). Returns null when the
-// active provider isn't one we know how to map (leaves the extension's own
-// provider selection alone in that case).
+// Read Hermes's ACTIVE model/provider (the one Joe selects in his main chat)
+// and map it to the extension's matching adapter so the panel talks straight to
+// the SAME model. Reads the DEFAULT profile's config.yaml — that's what Joe
+// switches — plus .env for keys. Maps provider -> {openai|anthropic} adapter and
+// resolves the key per provider. Returns { provider, model, baseUrl, apiKey,
+// type, reachable, reason } — reachable:false when no key exists for that
+// provider (e.g. anthropic via OAuth, which has no portable API key), so the
+// caller can tell Joe honestly instead of silently substituting another model.
 function readHermesProvider() {
   try {
     const home = process.env.HERMES_HOME || path.join(os.homedir(), "AppData", "Local", "hermes");
-    // Read the PINNED apollo profile — never the default profile. The default
-    // profile's active model changes as Joe switches models mid-chat (e.g. to
-    // claude-opus), which would mismatch the deepseek endpoint. The apollo
-    // profile is a stable set: provider + model + key that always agree.
-    const profile = process.env.APOLLO_HERMES_PROFILE || "apollo";
-    const cfgPath = path.join(home, "profiles", profile, "config.yaml");
-    const envDir = path.join(home, "profiles", profile);
+    // DEFAULT profile = what Joe selects in his main chat. Follow it. (An env
+    // override is allowed for a pinned setup, but the default is to follow.)
+    const profile = process.env.APOLLO_HERMES_PROFILE || "";
+    const cfgPath = profile
+      ? path.join(home, "profiles", profile, "config.yaml")
+      : path.join(home, "config.yaml");
     const cfg = readFileSync(cfgPath, "utf8").replace(/\r/g, "");
     const block = (cfg.match(/^model:[ \t]*\n((?:[ \t]+.*\n?)*)/m) || [])[1] || "";
     const grab = (k) => {
       const m = block.match(new RegExp("^ {2}" + k + ":[ \\t]*([^\\n]+)", "m"));
       return m ? m[1].trim() : "";
     };
-    const provider = grab("provider") || "deepseek";
+    const provider = (grab("provider") || "deepseek").toLowerCase();
     const model = grab("default") || "";
-    let baseUrl = "", apiKey = "";
+    const cfgBase = grab("base_url");
+    const cfgKey = grab("api_key");
 
-    // Read the profile's own .env first, then fall back to the shared root .env.
+    // .env: profile-local first (if pinned), then shared root .env.
     const readEnv = (dir) => {
-      try { return readFileSync(path.join(dir, ".env"), "utf8"); } catch { return ""; }
+      try { return readFileSync(path.join(dir, ".env"), "utf8").replace(/\r/g, ""); } catch { return ""; }
     };
-    const envText = readEnv(envDir).replace(/\r/g, "") + "\n" + readEnv(home).replace(/\r/g, "");
+    const envText =
+      (profile ? readEnv(path.join(home, "profiles", profile)) + "\n" : "") + readEnv(home);
     const getEnv = (k) => {
       const m = envText.match(new RegExp("^" + k + "=(.*)$", "m"));
       return m ? m[1].trim() : "";
     };
 
-    if (provider === "deepseek") {
-      baseUrl = getEnv("DEEPSEEK_BASE_URL") || "https://api.deepseek.com/v1";
-      apiKey = getEnv("DEEPSEEK_API_KEY");
-    } else if (provider === "openai") {
-      baseUrl = getEnv("OPENAI_BASE_URL") || "https://api.openai.com/v1";
-      apiKey = getEnv("OPENAI_API_KEY");
-    } else if (provider === "custom") {
-      baseUrl = grab("base_url");
-      apiKey = grab("api_key") || "local";
-    } else {
-      log("provider port: unsupported provider", provider, "(left the extension's provider unchanged)");
-      return null;
+    // Provider -> adapter type + endpoint + key source.
+    //   anthropic  -> extension's "anthropic" adapter (Messages API, direct-browser CORS)
+    //   everything else speaks OpenAI /chat/completions ("openai" adapter)
+    let type = "openai", baseUrl = "", apiKey = "";
+    switch (provider) {
+      case "anthropic":
+        type = "anthropic";
+        baseUrl = cfgBase && cfgBase !== "local" ? cfgBase : "https://api.anthropic.com/v1";
+        if (!/\/v1$/.test(baseUrl)) baseUrl = baseUrl.replace(/\/+$/, "") + "/v1";
+        apiKey = getEnv("ANTHROPIC_API_KEY"); // OAuth-based subscriptions have NONE
+        break;
+      case "deepseek":
+        baseUrl = getEnv("DEEPSEEK_BASE_URL") || "https://api.deepseek.com/v1";
+        apiKey = getEnv("DEEPSEEK_API_KEY");
+        break;
+      case "gemini":
+      case "google":
+        // Gemini's OpenAI-compatible endpoint.
+        baseUrl = getEnv("GEMINI_BASE_URL") || "https://generativelanguage.googleapis.com/v1beta/openai";
+        apiKey = getEnv("GEMINI_API_KEY");
+        break;
+      case "openai":
+        baseUrl = getEnv("OPENAI_BASE_URL") || "https://api.openai.com/v1";
+        apiKey = getEnv("OPENAI_API_KEY");
+        break;
+      case "custom":
+        baseUrl = cfgBase;
+        apiKey = cfgKey || "local"; // local endpoints accept any key
+        break;
+      default:
+        log("provider port: unknown provider", provider, "(left extension provider unchanged)");
+        return null;
     }
 
-    if (!model) return null;
-    return { provider, model, baseUrl, apiKey, type: "openai" };
+    if (!model || !baseUrl) return null;
+    // "local" custom key is fine (local server ignores it). For real cloud
+    // providers a missing key means we CANNOT call it directly.
+    const reachable = provider === "custom" ? true : !!apiKey;
+    const reason = reachable
+      ? ""
+      : `no API key for '${provider}' (Hermes reaches it via OAuth/subscription — not a portable key)`;
+    return { provider, model, baseUrl, apiKey, type, reachable, reason };
   } catch (e) {
     log("provider read failed:", e.message);
     return null;
@@ -300,7 +330,11 @@ function handleMessage(conn, raw) {
       // panel agent talks straight to the same model Hermes uses.
       const provider = readHermesProvider();
       if (provider) {
-        log("ported Hermes provider:", provider.provider, provider.model, "→", provider.baseUrl);
+        if (provider.reachable) {
+          log("ported Hermes provider:", provider.provider, provider.model, "(" + provider.type + ") →", provider.baseUrl);
+        } else {
+          log("Hermes active provider", provider.provider, provider.model, "is NOT directly reachable:", provider.reason);
+        }
         send(conn, { t: "provider", ...provider });
       }
       return;
