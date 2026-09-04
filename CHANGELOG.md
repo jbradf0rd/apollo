@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.6] — 2026-09-03
+
+### Changed
+- **Settings: legacy provider picker removed.** The "Add a provider / pick a model" UI (presets, per-provider base URL/key/model fields, Fetch models, Test) is gone — it was misleading because the Hermes provider port force-overrides `activeProviderId` on every bridge reconnect, silently undoing any manual pick. Section 1 is now a read-only **Model** status card showing what Hermes is supplying (provider → model, adapter type, or the bridge-fallback note when Hermes is on a no-key provider like claude/OAuth). Model selection happens in Hermes; Apollo follows.
+
 ## [0.2.5] — 2026-09-03
 
 ### Added

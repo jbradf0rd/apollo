@@ -12,70 +12,20 @@
         <img src="../../icons/icon48.png" alt="" width="32" height="32" />
         <div>
           <h1>Apollo Settings</h1>
-          <p class="sub">Bring your own LLM. Keys are stored locally in this browser and sent only to the provider you choose.</p>
+          <p class="sub">The model comes from Hermes. Everything below controls behavior, approvals, and site rules.</p>
         </div>
       </header>
 
       <section class="card">
-        <h2>1. Providers</h2>
-        <p class="hint">Add one or more model providers, then pick the one to use.</p>
-
-        <details class="model-help">
-          <summary>Need help choosing a model that works well?</summary>
-          <div class="model-help-body">
-            <p>
-              Apollo drives your browser by <strong>calling tools</strong>
-              and (when Vision is on) <strong>looking at screenshots</strong>, so
-              pick a model that supports both:
-            </p>
-            <ul>
-              <li>
-                <strong>Tool / function calling — required.</strong> Without it the
-                agent can't click, type, or navigate at all.
-              </li>
-              <li>
-                <strong>Vision (image input) — recommended.</strong> It's on by
-                default. Without it, anything that needs to <em>see</em> the page
-                (reading an image, a chart, a screenshot) won't work.
-              </li>
-            </ul>
-            <p class="warn">
-              Two things trip people up: (1) within a family, often only a
-              specific variant sees images — e.g. GLM's <code>-V</code> variant or
-              DeepSeek's <code>VL</code> line, not the plain text model. (2) A
-              model can support vision but have <strong>no tool-calling
-              endpoint</strong> — some Qwen-VL endpoints on OpenRouter are like
-              this, so they can see the page but can't act on it. You need
-              <em>both</em>.
-            </p>
-            <p>
-              <strong>Easy picks — tested, tools + vision both work:</strong> the
-              open <code>qwen/qwen3-vl-30b-a3b-instruct</code> is a fast, capable
-              default (use <code>qwen/qwen3-vl-235b-a22b-instruct</code> for more
-              muscle). <code>meta-llama/llama-4-maverick</code>,
-              <code>mistralai/mistral-small-3.2-24b-instruct</code> and
-              <code>google/gemma-3-27b-it</code> also pass. Prefer a closed model
-              that just works? <code>openai/gpt-4o</code>.
-            </p>
-            <p>
-              Exploring on your own? Don't match on vision alone — open the
-              <a href="https://openrouter.ai/models" target="_blank" rel="noopener">OpenRouter models list</a>,
-              filter by <strong>Tools</strong> <em>and</em> image support, then
-              paste the id into a provider below and hit <strong>Test</strong> to
-              confirm both live. That beats any name we hard-code, which goes stale.
-            </p>
+        <h2>1. Model</h2>
+        <p class="hint">Apollo uses whatever model you've selected in Hermes — nothing to configure here. Switch models in Hermes and Apollo follows (via the local bridge).</p>
+        <div class="provider-body">
+          <div class="provider-head">
+            <span class="pname" id="model-status-line">Waiting for the Hermes bridge…</span>
+            <span class="type-badge" id="model-status-badge"></span>
           </div>
-        </details>
-
-        <div class="add-row">
-          <select id="preset-select">
-            <option value="">Add a provider…</option>
-          </select>
-          <button id="add-provider" class="btn">Add</button>
+          <p class="hint" id="model-status-detail"></p>
         </div>
-
-        <div id="provider-list" class="provider-list"></div>
-        <p id="no-providers" class="empty-note">No providers yet. Add one above to get started.</p>
       </section>
 
       <section class="card">
@@ -177,40 +127,6 @@
         </span>
       </footer>
     </div>
-
-    <template id="provider-template">
-      <div class="provider" data-id="">
-        <div class="provider-head">
-          <label class="active-radio">
-            <input type="radio" name="active-provider" />
-            <span class="pname"></span>
-          </label>
-          <span class="type-badge"></span>
-          <button class="link-btn delete-provider">Remove</button>
-        </div>
-        <div class="provider-body">
-          <div class="field">
-            <label>Base URL</label>
-            <input type="text" class="base-url" placeholder="https://…/v1" />
-          </div>
-          <div class="field">
-            <label>API key <a class="key-link" target="_blank" rel="noopener" hidden>get one ↗</a></label>
-            <input type="password" class="api-key" placeholder="Paste your API key (leave blank for local models)" autocomplete="off" />
-          </div>
-          <div class="field">
-            <label>Model</label>
-            <div class="model-row">
-              <input type="text" class="model" list="" placeholder="model id" />
-              <button class="btn small fetch-models">Fetch models</button>
-              <button class="btn small test-model" title="Run a quick live check for tool calling and vision">Test</button>
-            </div>
-            <datalist></datalist>
-            <p class="hint fetch-status"></p>
-            <div class="test-status" hidden></div>
-          </div>
-        </div>
-      </div>
-    </template>
 
     <script type="module" src="options.js"></script>
   </body>

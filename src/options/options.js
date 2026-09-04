@@ -1,16 +1,15 @@
 // Options page: manage providers, model selection, behavior, and site rules.
 
-import { PROVIDER_PRESETS, DEFAULT_SETTINGS, MSG, STORAGE_KEY } from "../common/constants.js";
+import { DEFAULT_SETTINGS, MSG, STORAGE_KEY } from "../common/constants.js";
 import { loadConfig, saveConfig } from "../background/storage.js";
-import { listModels, testModel } from "../background/providers.js";
 import { connectServer, listTools } from "../background/mcp.js";
 
 let config;
 
 const $ = (sel) => document.querySelector(sel);
-const presetSelect = $("#preset-select");
-const providerList = $("#provider-list");
-const noProviders = $("#no-providers");
+const modelStatusLine = $("#model-status-line");
+const modelStatusBadge = $("#model-status-badge");
+const modelStatusDetail = $("#model-status-detail");
 const permList = $("#perm-list");
 const noPerms = $("#no-perms");
 const toast = $("#toast");
@@ -20,14 +19,6 @@ init();
 async function init() {
   config = await loadConfig();
 
-  for (const p of PROVIDER_PRESETS) {
-    const opt = document.createElement("option");
-    opt.value = p.id;
-    opt.textContent = p.name;
-    presetSelect.appendChild(opt);
-  }
-
-  $("#add-provider").addEventListener("click", addProviderFromPreset);
   $("#add-prompt").addEventListener("click", addPrompt);
   $("#add-sched").addEventListener("click", addSched);
   $("#add-mcp").addEventListener("click", addMcp);
@@ -52,7 +43,7 @@ async function init() {
 }
 
 function renderAll() {
-  renderProviders();
+  renderModelStatus();
   renderSettings();
   renderPermissions();
   renderPrompts();
@@ -64,170 +55,25 @@ function renderAll() {
 // -------------------------------------------------------------------------
 // Providers
 // -------------------------------------------------------------------------
-function addProviderFromPreset() {
-  const presetId = presetSelect.value;
-  if (!presetId) return;
-  const preset = PROVIDER_PRESETS.find((p) => p.id === presetId);
-  const provider = {
-    id: crypto.randomUUID(),
-    name: preset.name,
-    type: preset.type,
-    baseUrl: preset.baseUrl,
-    apiKey: "",
-    model: preset.defaultModel || "",
-    keyUrl: preset.keyUrl || "",
-    models: [],
-  };
-  config.providers.push(provider);
-  // Make it active if it's the first one.
-  if (!config.activeProviderId) {
-    config.activeProviderId = provider.id;
-    config.activeModel = provider.model;
-  }
-  presetSelect.value = "";
-  persist();
-  renderProviders();
-}
-
-function renderProviders() {
-  providerList.innerHTML = "";
-  noProviders.hidden = config.providers.length > 0;
-
-  const tpl = $("#provider-template");
-  for (const provider of config.providers) {
-    const node = tpl.content.firstElementChild.cloneNode(true);
-    node.dataset.id = provider.id;
-    const active = config.activeProviderId === provider.id;
-    node.classList.toggle("active", active);
-
-    node.querySelector(".pname").textContent = provider.name;
-    node.querySelector(".type-badge").textContent = provider.type;
-    const radio = node.querySelector('input[name="active-provider"]');
-    radio.checked = active;
-    radio.addEventListener("change", () => setActive(provider.id));
-
-    const baseUrl = node.querySelector(".base-url");
-    baseUrl.value = provider.baseUrl;
-    baseUrl.addEventListener("change", () => {
-      provider.baseUrl = baseUrl.value.trim();
-      persist();
-    });
-
-    const keyInput = node.querySelector(".api-key");
-    keyInput.value = provider.apiKey || "";
-    keyInput.addEventListener("change", () => {
-      provider.apiKey = keyInput.value.trim();
-      persist();
-    });
-    const keyLink = node.querySelector(".key-link");
-    if (provider.keyUrl) {
-      keyLink.href = provider.keyUrl;
-      keyLink.hidden = false;
-    }
-
-    const modelInput = node.querySelector(".model");
-    const datalist = node.querySelector("datalist");
-    const listId = "models-" + provider.id;
-    datalist.id = listId;
-    modelInput.setAttribute("list", listId);
-    modelInput.value = provider.model || "";
-    fillDatalist(datalist, provider.models);
-    modelInput.addEventListener("change", () => {
-      provider.model = modelInput.value.trim();
-      if (config.activeProviderId === provider.id) config.activeModel = provider.model;
-      persist();
-    });
-
-    const fetchBtn = node.querySelector(".fetch-models");
-    const fetchStatus = node.querySelector(".fetch-status");
-    fetchBtn.addEventListener("click", () => fetchModels(provider, fetchBtn, fetchStatus, datalist));
-
-    const testBtn = node.querySelector(".test-model");
-    const testStatus = node.querySelector(".test-status");
-    testBtn.addEventListener("click", () => runModelTest(provider, modelInput, testBtn, testStatus));
-
-    node.querySelector(".delete-provider").addEventListener("click", () => removeProvider(provider.id));
-
-    providerList.appendChild(node);
-  }
-}
-
-function setActive(id) {
-  config.activeProviderId = id;
-  const provider = config.providers.find((p) => p.id === id);
-  if (provider) config.activeModel = provider.model;
-  persist();
-  renderProviders();
-}
-
-function removeProvider(id) {
-  config.providers = config.providers.filter((p) => p.id !== id);
-  if (config.activeProviderId === id) {
-    config.activeProviderId = config.providers[0]?.id || null;
-    config.activeModel = config.providers[0]?.model || null;
-  }
-  persist();
-  renderProviders();
-}
-
-async function fetchModels(provider, btn, status, datalist) {
-  btn.disabled = true;
-  status.textContent = "Fetching…";
-  status.style.color = "var(--muted)";
-  try {
-    const models = await listModels(provider);
-    provider.models = models;
-    fillDatalist(datalist, models);
-    persist();
-    status.textContent = `Found ${models.length} models. Start typing to filter.`;
-  } catch (e) {
-    status.textContent = "Could not fetch models: " + (e.message || e);
-    status.style.color = "var(--danger)";
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-async function runModelTest(provider, modelInput, btn, statusEl) {
-  const model = (modelInput.value || provider.model || "").trim();
-  statusEl.hidden = false;
-  if (!model) {
-    statusEl.innerHTML = `<span class="test-line fail">Enter a model id first.</span>`;
-    return;
-  }
-  if (!provider.baseUrl) {
-    statusEl.innerHTML = `<span class="test-line fail">Set the provider's Base URL first.</span>`;
-    return;
-  }
-  btn.disabled = true;
-  statusEl.innerHTML = `<span class="test-line muted">Testing <code>${escapeHtml(model)}</code> — text, tools, vision…</span>`;
-  try {
-    const r = await testModel({ ...provider, model }, model);
-    const icon = { ok: "✓", warn: "⚠", fail: "✗" };
-    const line = (label, res) =>
-      `<span class="test-line ${res.status}">${icon[res.status]} <strong>${label}</strong> — ${escapeHtml(res.detail)}</span>`;
-    let verdict = "";
-    if (r.tools.status === "ok" && (r.vision.status === "ok" || r.vision.status === "warn")) {
-      verdict = `<span class="test-line ok">This model can drive Apollo.${r.vision.status === "ok" ? " Vision works too." : ""}</span>`;
-    } else if (r.tools.status !== "ok") {
-      verdict = `<span class="test-line fail">Tools didn't work — the agent can't act with this model. Pick a tool-capable one.</span>`;
-    } else if (r.vision.status === "fail") {
-      verdict = `<span class="test-line warn">Tools work, but this model can't see images. Fine for text tasks; turn off Vision or pick a multimodal model for image work.</span>`;
-    }
-    statusEl.innerHTML = [line("Text", r.text), line("Tools", r.tools), line("Vision", r.vision), verdict].join("");
-  } catch (e) {
-    statusEl.innerHTML = `<span class="test-line fail">Test failed: ${escapeHtml(String(e.message || e))}</span>`;
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-function fillDatalist(datalist, models) {
-  datalist.innerHTML = "";
-  for (const m of models || []) {
-    const opt = document.createElement("option");
-    opt.value = m;
-    datalist.appendChild(opt);
+function renderModelStatus() {
+  const active = config.providers.find((p) => p.id === config.activeProviderId);
+  if (!modelStatusLine || !modelStatusDetail) return;
+  if (config.hermesPortNote) {
+    // Hermes is on a model with no browser key — panel is on the bridge path.
+    modelStatusLine.textContent =
+      "Hermes: " + (config.hermesActiveProvider || "?") + " / " + (config.hermesActiveModel || "?");
+    modelStatusBadge.textContent = "bridged";
+    modelStatusDetail.textContent = config.hermesPortNote;
+  } else if (active) {
+    const who = (active.name || config.hermesActiveProvider || "hermes").replace(/^Hermes \(/, "Hermes: ").replace(/\)$/, "");
+    modelStatusLine.textContent = who + " → " + (config.activeModel || active.model || "?");
+    modelStatusBadge.textContent = active.type;
+    modelStatusDetail.textContent =
+      "Change the model in Hermes and Apollo follows automatically. Vision only works if the model accepts images.";
+  } else {
+    modelStatusLine.textContent = "Waiting for the Hermes bridge…";
+    modelStatusBadge.textContent = "";
+    modelStatusDetail.textContent = "Start it with: node bridge/relay.mjs";
   }
 }
 
