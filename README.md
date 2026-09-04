@@ -23,7 +23,7 @@ OpenSidekick is an excellent single-machine agent, but three things didn't fit a
 
 Hermes can already browse the web — but on its own it drives a *fresh, anonymous* automated browser, which means it hits logins, bot detection, and blank-slate sessions. Apollo hands Hermes **your real browser**:
 
-- **Your logged-in sessions.** Hermes can work inside pages where "being you" is the point — Gmail, YouTube Studio, Zoho, any account already signed in — without you ever handing over credentials.
+- **Your logged-in sessions.** Hermes can work inside pages where "being you" is the point — Gmail, YouTube, CRM, any account already signed in — without you ever handing over credentials.
 - **Whatever is already on screen.** A half-filled form, a tab left open, a page mid-scroll: Hermes reads it and acts in place, no re-navigation, no re-authentication.
 - **Cross-tab work in your live session.** "Take X from that tab, then do Y with it in this one" — cookies, extensions, and site permissions intact.
 - **Sites that break automation.** A real Chrome with real history looks human; a clean headless browser trips bot walls (and needs a backend installed). Apollo piggybacks on the Chrome you already run — zero setup.
