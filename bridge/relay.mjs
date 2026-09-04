@@ -86,6 +86,7 @@ const chatState = {
   sessionKey: "apollo-panel",
 };
 const HERMES_CMD = process.env.APOLLO_HERMES_CMD || "hermes";
+const HERMES_MODEL = process.env.APOLLO_HERMES_MODEL || ""; // e.g. "apollo-local" — empty = profile default (cloud)
 const CHAT_MAX_MS = 420000;
 
 function sendToExt(msg) {
@@ -133,7 +134,10 @@ function handleChatMessage(conn, msg) {
 function runHermesChat(id, text, conn) {
   // -Q: quiet one-shot — stdout carries ONLY the assistant's reply (no banners
   // or session summary), so deltas can stream straight to the panel.
+  // APOLLO_HERMES_MODEL selects the model/provider (a model alias like
+  // "apollo-local" for the on-box box); empty = the profile default (cloud).
   const args = ["chat", "--query-file", "-", "-Q", "--continue", chatState.sessionKey, "--create-if-missing"];
+  if (HERMES_MODEL) args.push("-m", HERMES_MODEL);
   log("spawning hermes:", HERMES_CMD, args.join(" "));
   let child;
   try {
