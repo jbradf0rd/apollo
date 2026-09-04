@@ -119,6 +119,11 @@ chrome.runtime.onStartup.addListener(() => {
   startRelay();
 });
 
+// Reconnect on every worker spin-up — MV3 kills an idle worker (and its
+// socket) ~30s after the relay drops; without this the bridge never comes
+// back until Chrome restarts. startRelay is idempotent.
+startRelay();
+
 // Apply one-time config migrations to an existing stored config. Does nothing on
 // a fresh install (no stored config yet), so it can't clobber a config that's
 // being written concurrently at first run.
