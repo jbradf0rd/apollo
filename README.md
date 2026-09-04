@@ -19,6 +19,18 @@ OpenSidekick is an excellent single-machine agent, but three things didn't fit a
 2. **The model lived in the browser.** Keys and model choice were configured inside the extension, disconnected from the rest of your agent stack. Apollo ports Hermes's *active* model selection into the panel — change models in Hermes, and Apollo changes with you.
 3. **No bridge to your own agent.** OpenSidekick is a standalone loop. Apollo adds a local relay (`127.0.0.1:8765`) that lets **Hermes call the browser's tools as MCP tools** — so Hermes can read pages, click, type, and navigate in your real logged-in sessions, not a headless shell.
 
+## What Apollo gives Hermes
+
+Hermes can already browse the web — but on its own it drives a *fresh, anonymous* automated browser, which means it hits logins, bot detection, and blank-slate sessions. Apollo hands Hermes **your real browser**:
+
+- **Your logged-in sessions.** Hermes can work inside pages where "being you" is the point — Gmail, YouTube Studio, Zoho, any account already signed in — without you ever handing over credentials.
+- **Whatever is already on screen.** A half-filled form, a tab left open, a page mid-scroll: Hermes reads it and acts in place, no re-navigation, no re-authentication.
+- **Cross-tab work in your live session.** "Take X from that tab, then do Y with it in this one" — cookies, extensions, and site permissions intact.
+- **Sites that break automation.** A real Chrome with real history looks human; a clean headless browser trips bot walls (and needs a backend installed). Apollo piggybacks on the Chrome you already run — zero setup.
+- **Human-in-the-loop control.** Approval prompts and site rules live next to the work, in the browser you're already watching.
+
+The boundary: Apollo adds the *browser-with-your-identity* surface. Plain text, APIs, and research outside the browser are already Hermes's own job.
+
 ## How Apollo differs from OpenSidekick
 
 | | **OpenSidekick** (upstream) | **Apollo** (this fork) |
