@@ -79,7 +79,7 @@ The panel's own chat is **independent** of that MCP path — it talks straight t
 
 ```bash
 # 1. Clone (or your own fork)
-git clone https://github.com/jbradf0rd/openApollo.git
+git clone https://github.com/jbradf0rd/apollo.git
 cd openApollo
 
 # 2. Start the relay (always-on bridge; survives while this terminal lives)

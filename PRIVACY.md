@@ -50,4 +50,4 @@ machine at all.
 
 ## Contact
 
-Open an issue at https://github.com/jbradf0rd/openApollo (upstream: https://github.com/esterhuizen/opensidekick) for questions.
+Open an issue at https://github.com/jbradf0rd/apollo (upstream: https://github.com/esterhuizen/opensidekick) for questions.

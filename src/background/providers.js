@@ -155,7 +155,7 @@ function openaiHeaders(provider) {
   const h = { "content-type": "application/json" };
   if (provider.apiKey) h["authorization"] = `Bearer ${provider.apiKey}`;
   // OpenRouter attribution headers (harmless for other providers).
-  h["http-referer"] = "https://github.com/jbradf0rd/openApollo";
+  h["http-referer"] = "https://github.com/jbradf0rd/apollo";
   h["x-title"] = "Apollo";
   return h;
 }
