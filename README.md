@@ -135,4 +135,4 @@ icons/  manifest.json
 
 ## License
 
-MIT. Apollo is a fork of [OpenSidekick](https://github.com/esterhuizen/opensidekick) (MIT, © 2026 its contributors); fork additions © 2026 Joe Bradford. This project is not affiliated with Nous Research.
+MIT. Apollo is a fork of [OpenSidekick](https://github.com/esterhuizen/opensidekick) (MIT, © 2026 its contributors); fork additions © 2026 Apollo contributors. This project is not affiliated with Nous Research.
