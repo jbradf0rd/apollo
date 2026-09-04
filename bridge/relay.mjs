@@ -22,6 +22,9 @@
 
 import http from "node:http";
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { attachWs } from "./ws-server.mjs";
 
 const args = process.argv.slice(2);
@@ -203,6 +206,48 @@ function runHermesChat(id, text, conn) {
   child.stdin.end();
 }
 
+// Read Hermes's ACTIVE model/provider so the extension's lean panel agent can
+// talk straight to the same model — no Hermes process in the chat path. Reads
+// config.yaml (provider/default) + .env (the API key). Returns null when the
+// active provider isn't one we know how to map (leaves the extension's own
+// provider selection alone in that case).
+function readHermesProvider() {
+  try {
+    const home = process.env.HERMES_HOME || path.join(os.homedir(), "AppData", "Local", "hermes");
+    const cfg = readFileSync(path.join(home, "config.yaml"), "utf8");
+    const block = (cfg.match(/^model:\s*\n([\s\S]*?)(?=\n\w|$)/m) || [])[1] || "";
+    const grab = (k) => {
+      const m = block.match(new RegExp("^\\s{2}" + k + ":\\s*([^\\n]+)", "m"));
+      return m ? m[1].trim() : "";
+    };
+    const provider = grab("provider") || "deepseek";
+    const model = grab("default") || "";
+    let baseUrl = "", apiKey = "";
+
+    if (provider === "deepseek") {
+      const env = readFileSync(path.join(home, ".env"), "utf8");
+      const getEnv = (k) => {
+        const m = env.match(new RegExp("^" + k + "=(.*)$", "m"));
+        return m ? m[1].trim() : "";
+      };
+      baseUrl = getEnv("DEEPSEEK_BASE_URL") || "https://api.deepseek.com/v1";
+      apiKey = getEnv("DEEPSEEK_API_KEY");
+    } else if (provider === "custom") {
+      baseUrl = grab("base_url");
+      apiKey = grab("api_key") || "local";
+    } else {
+      log("provider port: unsupported active provider", provider, "(left the extension's provider unchanged)");
+      return null;
+    }
+
+    if (!model) return null;
+    return { provider, model, baseUrl, apiKey, type: "openai" };
+  } catch (e) {
+    log("provider read failed:", e.message);
+    return null;
+  }
+}
+
 function send(conn, obj) {
   try {
     conn.send(JSON.stringify(obj));
@@ -235,7 +280,15 @@ function handleMessage(conn, raw) {
       ext = { conn, tools: msg.tools || [], mutating: msg.mutating || [], name: msg.name || "extension" };
       log(`extension registered: ${ext.tools.length} tools, ${ext.mutating.length} mutating`);
       // Announce tools to any control client that asked while we had none.
-      return send(conn, { t: "reg_ack", tools: ext.tools.length });
+      send(conn, { t: "reg_ack", tools: ext.tools.length });
+      // Port Hermes's active model/provider into the extension so the lean
+      // panel agent talks straight to the same model Hermes uses.
+      const provider = readHermesProvider();
+      if (provider) {
+        log("ported Hermes provider:", provider.provider, provider.model, "→", provider.baseUrl);
+        send(conn, { t: "provider", ...provider });
+      }
+      return;
     }
     case "tools": {
       if (!ext) return send(conn, { t: "res", id: msg.id, ok: false, error: "no extension connected" });

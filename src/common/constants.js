@@ -5,9 +5,10 @@
 
 export const STORAGE_KEY = "opensidekick.config.v1";
 
-// chrome.storage.session key for the current chat's conversation. MV3 can
+// chrome.storage.local key for the current chat's conversation. MV3 can
 // terminate the idle service worker at any time; persisting here lets the next
-// worker pick the chat back up (and it clears automatically when Chrome closes).
+// worker pick the chat back up — and unlike chrome.storage.session, it survives
+// the browser closing (context is never lost when Apollo is closed).
 export const SESSION_CONVO_KEY = "opensidekick.conversation.v1";
 
 // chrome.storage.session key for a finished recording that hasn't been saved or

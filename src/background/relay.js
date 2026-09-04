@@ -18,7 +18,7 @@
 
 import { TOOL_DEFS, executeTool } from "./tools.js";
 import { MUTATING_TOOLS } from "./permissions.js";
-import { loadConfig } from "./storage.js";
+import { loadConfig, saveConfig } from "./storage.js";
 
 const WS_URL = "ws://127.0.0.1:8765/";
 const KEEPALIVE_MS = 20000;
@@ -89,6 +89,7 @@ export function startRelay() {
     if (msg.t === "ping") send({ t: "pong" });
     else if (msg.t === "call") handleCall(msg);
     else if (msg.t === "chat_delta" || msg.t === "chat_res") settleChat(msg);
+    else if (msg.t === "provider") applyHermesProvider(msg);
   };
 
   socket.onclose = () => {
@@ -296,6 +297,48 @@ export function sendRelayChatAbort() {
   if (!isRelayOpen()) return;
   const id = ++chatSeq;
   send({ t: "chat_abort", id });
+}
+
+// ---------------------------------------------------------------------------
+// Provider port — the relay sends Hermes's active model, the extension stores
+// it as a "hermes" provider so the lean panel agent uses the same model.
+// ---------------------------------------------------------------------------
+
+async function applyHermesProvider(msg) {
+  try {
+    const config = await loadConfig();
+    const id = "hermes";
+    const baseUrl = msg.baseUrl || "";
+    const apiKey = msg.apiKey || "";
+    const model = msg.model || "";
+    const cur = (config.providers || []).find((p) => p.id === id);
+    // Dedupe: skip the write when nothing changed. This also breaks the
+    // save → storage.onChanged → register → provider loop.
+    if (
+      cur &&
+      cur.baseUrl === baseUrl &&
+      cur.apiKey === apiKey &&
+      config.activeProviderId === id &&
+      config.activeModel === model
+    ) {
+      return;
+    }
+    const providers = (config.providers || []).filter((p) => p.id !== id);
+    providers.push({
+      id,
+      name: "Hermes (" + (msg.provider || "model") + ")",
+      type: "openai",
+      baseUrl,
+      apiKey,
+    });
+    config.providers = providers;
+    config.activeProviderId = id;
+    config.activeModel = model;
+    await saveConfig(config);
+    console.log("[apollo-relay] ported Hermes model:", msg.provider, model);
+  } catch (e) {
+    console.warn("[apollo-relay] provider apply failed:", e.message || e);
+  }
 }
 
 // If relay settings change (vision/js/devtools toggles), the tool list Hermes
