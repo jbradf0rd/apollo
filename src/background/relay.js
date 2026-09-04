@@ -90,6 +90,7 @@ export function startRelay() {
 
   socket.onclose = () => {
     stopKeepAlive();
+    setBadge(false, 0);
     ws = null;
     if (!stopped) scheduleReconnect();
   };
@@ -167,6 +168,26 @@ async function register() {
     mutating: [...MUTATING_TOOLS],
   });
   console.log(`[apollo-relay] registered ${tools.length} tools with the relay`);
+  setBadge(true, tools.length);
+}
+
+// Visible bridge state on the toolbar icon: green ✓ while the Hermes relay is
+// connected, red ✗ when the connection drops. This is the fork's on-screen
+// "the bridge is alive" indicator.
+function setBadge(connected, toolCount) {
+  try {
+    if (connected) {
+      chrome.action.setBadgeBackgroundColor({ color: "#16a34a" });
+      chrome.action.setBadgeText({ text: "✓" });
+      chrome.action.setTitle({ title: `Apollo — Hermes bridge connected (${toolCount} browser tools)` });
+    } else {
+      chrome.action.setBadgeBackgroundColor({ color: "#dc2626" });
+      chrome.action.setBadgeText({ text: "✗" });
+      chrome.action.setTitle({ title: "Apollo — Hermes bridge disconnected" });
+    }
+  } catch {
+    /* badge is cosmetic — never break the relay for it */
+  }
 }
 
 async function handleCall(msg) {

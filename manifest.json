@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "OpenSidekick — Bring-Your-Own-LLM Browser Agent",
-  "short_name": "OpenSidekick",
-  "version": "0.1.7",
-  "description": "Open-source AI assistant that reads and acts on web pages using any model you choose. Your keys stay in your browser.",
-  "author": "OpenSidekick contributors",
+  "name": "Apollo — Hermes-Driven Browser Agent",
+  "short_name": "Apollo",
+  "version": "0.2.0",
+  "description": "Fork of OpenSidekick: an AI browser agent whose hands live in your browser and whose brain is your Hermes agent.",
+  "author": "jbradf0rd",
   "homepage_url": "https://opensidekick.app",
   "minimum_chrome_version": "116",
   "icons": {
@@ -14,7 +14,7 @@
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_title": "Open OpenSidekick (Ctrl+E / Cmd+E)",
+    "default_title": "Open Apollo (Ctrl+E / Cmd+E)",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
@@ -62,7 +62,7 @@
         "default": "Ctrl+E",
         "mac": "Command+E"
       },
-      "description": "Open the OpenSidekick side panel"
+      "description": "Open the Apollo side panel"
     }
   }
 }

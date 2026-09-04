@@ -208,7 +208,7 @@ async function runModelTest(provider, modelInput, btn, statusEl) {
       `<span class="test-line ${res.status}">${icon[res.status]} <strong>${label}</strong> — ${escapeHtml(res.detail)}</span>`;
     let verdict = "";
     if (r.tools.status === "ok" && (r.vision.status === "ok" || r.vision.status === "warn")) {
-      verdict = `<span class="test-line ok">This model can drive OpenSidekick.${r.vision.status === "ok" ? " Vision works too." : ""}</span>`;
+      verdict = `<span class="test-line ok">This model can drive Apollo.${r.vision.status === "ok" ? " Vision works too." : ""}</span>`;
     } else if (r.tools.status !== "ok") {
       verdict = `<span class="test-line fail">Tools didn't work — the agent can't act with this model. Pick a tool-capable one.</span>`;
     } else if (r.vision.status === "fail") {

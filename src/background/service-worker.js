@@ -100,12 +100,12 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
   chrome.contextMenus.create({
     id: "ask-opensidekick",
-    title: 'Ask OpenSidekick about "%s"',
+    title: 'Ask Apollo about "%s"',
     contexts: ["selection"],
   });
   chrome.contextMenus.create({
     id: "summarize-page",
-    title: "Summarize this page with OpenSidekick",
+    title: "Summarize this page with Apollo",
     contexts: ["page"],
   });
   runMigrations();
