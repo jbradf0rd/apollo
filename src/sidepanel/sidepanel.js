@@ -16,6 +16,7 @@ const els = {
   settings: document.getElementById("open-settings"),
   status: document.getElementById("status-bar"),
   contextHint: document.getElementById("context-hint"),
+  hermesHandoff: document.getElementById("hermes-handoff"),
   setupLink: document.getElementById("setup-link"),
   slashMenu: document.getElementById("slash-menu"),
   recordBtn: document.getElementById("record-btn"),
@@ -102,7 +103,7 @@ async function init() {
   els.input.addEventListener("blur", () => setTimeout(hideSlashMenu, 150));
   els.stop.addEventListener("click", () => send({ type: MSG.STOP_TASK }));
   els.newChat.addEventListener("click", newChat);
-  els.hermesHandoff.addEventListener("click", handoffToHermes);
+  if (els.hermesHandoff) els.hermesHandoff.addEventListener("click", handoffToHermes);
   els.settings.addEventListener("click", () => chrome.runtime.openOptionsPage());
   if (els.setupLink) els.setupLink.addEventListener("click", (e) => { e.preventDefault(); chrome.runtime.openOptionsPage(); });
   document.querySelectorAll(".examples li").forEach((li) =>

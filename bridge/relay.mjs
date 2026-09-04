@@ -222,7 +222,7 @@ function runHermesChat(id, text, conn, quiet) {
     const textOut = stdout.trim();
     if (code === 0 && textOut) {
       log("chat reply ok:", textOut.length, "chars");
-      sendToExt({ t: "chat_res", id, ok: true, text: textOut });
+      sendToExt({ t: "chat_res", id, ok: true, text: textOut, session: chatState.sessionKey });
     } else if (!textOut) {
       const err = (stderr.trim() || `hermes exited with code ${code}`).split("\n").pop().slice(0, 400);
       log("chat failed:", err);
@@ -230,7 +230,7 @@ function runHermesChat(id, text, conn, quiet) {
     } else {
       // Nonzero exit but produced text — deliver what we got.
       log("chat exited", code, "with text:", textOut.length, "chars");
-      sendToExt({ t: "chat_res", id, ok: true, text: textOut });
+      sendToExt({ t: "chat_res", id, ok: true, text: textOut, session: chatState.sessionKey });
     }
   });
 
