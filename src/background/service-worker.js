@@ -8,7 +8,7 @@ import { runAgent } from "./agent.js";
 import { detachAll } from "./cdp.js";
 import { ensureContentScript } from "./tools.js";
 import { applyMigrations } from "./migrations.js";
-import { startRelay } from "./relay.js";
+import { startRelay, isRelayOpen, sendRelayChat, sendRelayNewChat, sendRelayChatAbort } from "./relay.js";
 
 // -------------------------------------------------------------------------
 // State
@@ -188,10 +188,14 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     }
     case MSG.NEW_CHAT: {
       clearConversation().then(() => sendResponse({ ok: true }));
+      // Start a fresh Hermes conversation on the bridge too (fire and forget).
+      sendRelayNewChat();
       return true;
     }
     case MSG.STOP_TASK: {
       if (currentRun) currentRun.controller.abort();
+      // Kill a running Hermes chat process at the relay.
+      sendRelayChatAbort();
       // Also cancel any pending permission or plan prompt.
       for (const [, resolve] of pendingPermissions) resolve("decline");
       pendingPermissions.clear();
@@ -255,9 +259,13 @@ async function handleGetState() {
   await ensureConversationLoaded();
   const seed = pendingSeed;
   pendingSeed = null;
+  // With the Hermes bridge up, the panel is "configured" even with no model
+  // key — chat is routed to Hermes instead of a raw provider.
+  const hermes = isRelayOpen();
   return {
     ok: true,
-    configured: !!(provider && config.activeModel),
+    configured: !!(provider && config.activeModel) || hermes,
+    hermes,
     providerName: provider ? provider.name : null,
     model: config.activeModel || null,
     autonomy: config.settings.autonomy,
@@ -291,6 +299,19 @@ function conversationHistory() {
 async function handleRunTask(msg) {
   if (currentRun) return { ok: false, error: "A task is already running." };
 
+  if (msg.newChat) await clearConversation();
+  else await ensureConversationLoaded();
+  conversation.push({ role: "user", content: msg.task });
+  emit({ kind: "user_echo", text: msg.task });
+
+  // Hermes mode: the bridge is up, so the panel's brain is a Hermes session
+  // (memory, skills, MCP stack, and this extension's own tools on tap) — no
+  // model key needed in the browser.
+  if (isRelayOpen()) {
+    runHermesChatTask(msg.task);
+    return { ok: true };
+  }
+
   const { config, provider } = await getActiveProvider();
   if (!provider) {
     emit({ kind: "error", error: "No provider configured. Open Settings to add one." });
@@ -302,11 +323,6 @@ async function handleRunTask(msg) {
     emit({ kind: "idle" });
     return { ok: false, error: "no-model" };
   }
-
-  if (msg.newChat) await clearConversation();
-  else await ensureConversationLoaded();
-  conversation.push({ role: "user", content: msg.task });
-  emit({ kind: "user_echo", text: msg.task });
 
   const controller = new AbortController();
   currentRun = { controller };
@@ -345,6 +361,41 @@ async function handleRunTask(msg) {
     });
 
   return { ok: true };
+}
+
+// Hermes mode task runner: stream the user's message to the bridge, which runs
+// it through a resumable `hermes chat` session, and relay the reply back into
+// the panel with the same events the built-in loop would emit.
+function runHermesChatTask(taskText) {
+  const controller = new AbortController();
+  currentRun = { controller };
+  startKeepAlive();
+  emit({ kind: "assistant_start" });
+  sendRelayChat(taskText, {
+    onDelta: (d) => {
+      if (d) emit({ kind: "assistant_delta", text: d });
+    },
+    signal: controller.signal,
+  })
+    .then((res) => {
+      if (!res.ok) {
+        emit({ kind: "error", error: res.error || "Hermes chat failed." });
+        return;
+      }
+      const text = (res.text || "").trim();
+      conversation.push({ role: "assistant", content: text || "(no text reply)" });
+      emit({ kind: "assistant_end", content: text });
+    })
+    .catch((e) => {
+      if (controller.signal.aborted) emit({ kind: "aborted" });
+      else emit({ kind: "error", error: String((e && e.message) || e) });
+    })
+    .finally(async () => {
+      await persistConversation();
+      currentRun = null;
+      if (!recording) stopKeepAlive();
+      emit({ kind: "idle" });
+    });
 }
 
 // Ask the side panel to approve an action. Resolves to "once" | "always" | "decline".

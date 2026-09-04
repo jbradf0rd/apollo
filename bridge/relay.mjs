@@ -21,6 +21,7 @@
 // Run:  node bridge/relay.mjs [--port 8765] [--host 127.0.0.1]
 
 import http from "node:http";
+import { spawn } from "node:child_process";
 import { attachWs } from "./ws-server.mjs";
 
 const args = process.argv.slice(2);
@@ -54,6 +55,11 @@ hub.on("connection", (conn) => {
         pending.delete(id);
         send(entry.conn, { t: "res", id: entry.clientId, ok: false, error: "extension disconnected" });
       }
+      // A chat that was waiting on a reply is also unresolvable.
+      if (chatState.extConn === conn) {
+        chatState.extConn = null;
+        if (chatState.child) killChatChild();
+      }
     } else if (pending.size) {
       // Drop calls that were waiting on this control connection.
       for (const [id, entry] of [...pending]) {
@@ -67,6 +73,125 @@ hub.on("connection", (conn) => {
   });
   log(`connection opened (${connCount} open)`);
 });
+
+// --- chat channel: extension <-> a resumable `hermes chat` session ----------
+// The side panel's composer talks to Hermes itself (memory, skills, MCP stack)
+// rather than a raw model. Each message spawns one `hermes chat` one-shot that
+// continues the SAME named session, so the panel keeps one conversation. Chats
+// are serialized — one at a time.
+const chatState = {
+  extConn: null, // connection of the extension that owns the chat
+  child: null, // running hermes process
+  busy: false,
+  sessionKey: "apollo-panel",
+};
+const HERMES_CMD = process.env.APOLLO_HERMES_CMD || "hermes";
+const CHAT_MAX_MS = 420000;
+
+function sendToExt(msg) {
+  if (chatState.extConn && ext && ext.conn === chatState.extConn) send(ext.conn, msg);
+}
+
+function killChatChild() {
+  if (chatState.child) {
+    try {
+      chatState.child.kill();
+    } catch {}
+    chatState.child = null;
+  }
+}
+
+// Route chat messages. `conn` must be the registered extension connection.
+function handleChatMessage(conn, msg) {
+  switch (msg.t) {
+    case "chat_new":
+      chatState.sessionKey = "apollo-panel-" + Date.now();
+      chatState.extConn = conn;
+      log("new chat → session key:", chatState.sessionKey);
+      return send(conn, { t: "chat_ack", id: msg.id });
+    case "chat_abort":
+      if (chatState.child) {
+        log("aborting chat");
+        killChatChild();
+      }
+      chatState.busy = false;
+      return send(conn, { t: "chat_ack", id: msg.id });
+    case "chat": {
+      chatState.extConn = conn;
+      if (chatState.busy) {
+        return send(conn, { t: "chat_res", id: msg.id, ok: false, error: "A chat is already running." });
+      }
+      chatState.busy = true;
+      runHermesChat(msg.id, String(msg.text || ""), conn);
+      return;
+    }
+    default:
+      if (msg.id != null) return send(conn, { t: "res", id: msg.id, ok: false, error: "unknown chat message: " + msg.t });
+  }
+}
+
+function runHermesChat(id, text, conn) {
+  // -Q: quiet one-shot — stdout carries ONLY the assistant's reply (no banners
+  // or session summary), so deltas can stream straight to the panel.
+  const args = ["chat", "--query-file", "-", "-Q", "--continue", chatState.sessionKey, "--create-if-missing"];
+  log("spawning hermes:", HERMES_CMD, args.join(" "));
+  let child;
+  try {
+    child = spawn(HERMES_CMD, args, {
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+    });
+  } catch (e) {
+    chatState.busy = false;
+    return send(conn, { t: "chat_res", id, ok: false, error: "Could not start hermes: " + (e.message || e) });
+  }
+  chatState.child = child;
+  const timer = setTimeout(() => {
+    log("chat timed out after", CHAT_MAX_MS, "ms");
+    killChatChild();
+  }, CHAT_MAX_MS);
+
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (d) => {
+    // Strip ANSI escape sequences + CRs — the panel renders plain text.
+    const chunk = d.toString("utf8").replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "").replace(/\r/g, "");
+    stdout += chunk;
+    // Forward as it arrives — the panel can stream the reply live.
+    sendToExt({ t: "chat_delta", id, text: chunk });
+  });
+  child.stderr.on("data", (d) => {
+    stderr += d.toString("utf8");
+  });
+  child.on("error", (e) => {
+    clearTimeout(timer);
+    chatState.busy = false;
+    chatState.child = null;
+    sendToExt({ t: "chat_res", id, ok: false, error: "hermes failed to start: " + (e.message || e) });
+  });
+  child.on("close", (code) => {
+    clearTimeout(timer);
+    chatState.busy = false;
+    chatState.child = null;
+    const textOut = stdout.trim();
+    if (code === 0 && textOut) {
+      log("chat reply ok:", textOut.length, "chars");
+      sendToExt({ t: "chat_res", id, ok: true, text: textOut });
+    } else if (!textOut) {
+      const err = (stderr.trim() || `hermes exited with code ${code}`).split("\n").pop().slice(0, 400);
+      log("chat failed:", err);
+      sendToExt({ t: "chat_res", id, ok: false, error: err });
+    } else {
+      // Nonzero exit but produced text — deliver what we got.
+      log("chat exited", code, "with text:", textOut.length, "chars");
+      sendToExt({ t: "chat_res", id, ok: true, text: textOut });
+    }
+  });
+
+  // Feed the query via stdin (--query-file -) — safe for arbitrary text.
+  child.stdin.write(text);
+  child.stdin.end();
+}
 
 function send(conn, obj) {
   try {
@@ -86,6 +211,15 @@ function handleMessage(conn, raw) {
   switch (msg.t) {
     case "ping":
       return send(conn, { t: "pong" });
+    case "chat":
+    case "chat_new":
+    case "chat_abort":
+      // Chat channel — only the registered extension may drive it.
+      if (!ext || ext.conn !== conn) {
+        if (msg.id != null) return send(conn, { t: "chat_res", id: msg.id, ok: false, error: "not the registered extension" });
+        return;
+      }
+      return handleChatMessage(conn, msg);
     case "reg": {
       // A tool-carrying client = the browser extension.
       ext = { conn, tools: msg.tools || [], mutating: msg.mutating || [], name: msg.name || "extension" };

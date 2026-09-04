@@ -28,6 +28,8 @@ let ws = null;
 let keepAliveTimer = null;
 let reconnectDelay = 1000;
 let stopped = false;
+let chatSeq = 0;
+const chatPending = new Map(); // chatSeq -> { resolve, onDelta }
 
 // The remote agent's "focused tab": starts at the active tab of the
 // last-focused window; open_tab / switch_tab move it (same contract the
@@ -86,11 +88,15 @@ export function startRelay() {
     }
     if (msg.t === "ping") send({ t: "pong" });
     else if (msg.t === "call") handleCall(msg);
+    else if (msg.t === "chat_delta" || msg.t === "chat_res") settleChat(msg);
   };
 
   socket.onclose = () => {
     stopKeepAlive();
     setBadge(false, 0);
+    // Fail any in-flight Hermes chats — the relay is gone.
+    for (const [, p] of chatPending) p.resolve({ ok: false, error: "Hermes bridge disconnected." });
+    chatPending.clear();
     ws = null;
     if (!stopped) scheduleReconnect();
   };
@@ -223,6 +229,66 @@ async function allowMutating() {
 
 function send(obj) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+}
+
+// ---------------------------------------------------------------------------
+// Chat channel — the side panel talks to Hermes through the relay
+// ---------------------------------------------------------------------------
+
+export function isRelayOpen() {
+  return !!(ws && ws.readyState === WebSocket.OPEN);
+}
+
+function settleChat(msg) {
+  if (msg.t === "chat_delta") {
+    const p = chatPending.get(msg.id);
+    if (p && p.onDelta) p.onDelta(msg.text || "");
+    return;
+  }
+  const p = chatPending.get(msg.id);
+  if (!p) return;
+  chatPending.delete(msg.id);
+  p.resolve(msg);
+}
+
+// Send one user message to the Hermes chat session; resolves with the relay's
+// { ok, text | error }. Streams text chunks via onDelta as they arrive.
+export function sendRelayChat(text, { onDelta, signal } = {}) {
+  return new Promise((resolve, reject) => {
+    if (!isRelayOpen()) {
+      reject(new Error("Hermes bridge offline."));
+      return;
+    }
+    const id = ++chatSeq;
+    const onAbort = () => {
+      chatPending.delete(id);
+      reject(new Error("aborted"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    chatPending.set(id, {
+      onDelta,
+      resolve: (msg) => {
+        signal?.removeEventListener("abort", onAbort);
+        if (msg.ok === false) resolve({ ok: false, error: msg.error || "hermes chat failed" });
+        else resolve({ ok: true, text: (msg.text || "").trim() });
+      },
+    });
+    send({ t: "chat", id, text });
+  });
+}
+
+// Tell the relay to start a fresh Hermes conversation (New Chat button).
+export function sendRelayNewChat() {
+  if (!isRelayOpen()) return;
+  const id = ++chatSeq;
+  send({ t: "chat_new", id });
+}
+
+// Tell the relay to kill the running hermes process (Stop button).
+export function sendRelayChatAbort() {
+  if (!isRelayOpen()) return;
+  const id = ++chatSeq;
+  send({ t: "chat_abort", id });
 }
 
 // If relay settings change (vision/js/devtools toggles), the tool list Hermes
