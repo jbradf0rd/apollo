@@ -86,7 +86,8 @@ const chatState = {
   sessionKey: "apollo-panel",
 };
 const HERMES_CMD = process.env.APOLLO_HERMES_CMD || "hermes";
-const HERMES_MODEL = process.env.APOLLO_HERMES_MODEL || ""; // e.g. "apollo-local" — empty = profile default (cloud)
+const HERMES_PROFILE = process.env.APOLLO_HERMES_PROFILE || "apollo"; // dedicated lean profile (browser tools + local model only)
+const HERMES_MODEL = process.env.APOLLO_HERMES_MODEL || ""; // override the profile default (empty = profile's model)
 const CHAT_MAX_MS = 420000;
 
 function sendToExt(msg) {
@@ -134,9 +135,9 @@ function handleChatMessage(conn, msg) {
 function runHermesChat(id, text, conn) {
   // -Q: quiet one-shot — stdout carries ONLY the assistant's reply (no banners
   // or session summary), so deltas can stream straight to the panel.
-  // APOLLO_HERMES_MODEL selects the model/provider (a model alias like
-  // "apollo-local" for the on-box box); empty = the profile default (cloud).
-  const args = ["chat", "--query-file", "-", "-Q", "--continue", chatState.sessionKey, "--create-if-missing"];
+  // The dedicated "apollo" profile gives it a local model + only the browser
+  // tools (no cloud MCP servers, so no OAuth re-auth stalls per message).
+  const args = ["-p", HERMES_PROFILE, "chat", "--query-file", "-", "-Q", "--continue", chatState.sessionKey, "--create-if-missing"];
   if (HERMES_MODEL) args.push("-m", HERMES_MODEL);
   log("spawning hermes:", HERMES_CMD, args.join(" "));
   let child;
@@ -158,8 +159,13 @@ function runHermesChat(id, text, conn) {
   let stdout = "";
   let stderr = "";
   child.stdout.on("data", (d) => {
-    // Strip ANSI escape sequences + CRs — the panel renders plain text.
-    const chunk = d.toString("utf8").replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "").replace(/\r/g, "");
+    // Strip ANSI escape sequences + CRs, and drop Hermes's cosmetic model-
+    // normalization notices — the panel renders only the reply.
+    const chunk = d
+      .toString("utf8")
+      .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "")
+      .replace(/\r/g, "")
+      .replace(/⚠️\s*Normalized model[^\n]*\n?/g, "");
     stdout += chunk;
     // Forward as it arrives — the panel can stream the reply live.
     sendToExt({ t: "chat_delta", id, text: chunk });
