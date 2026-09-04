@@ -7,7 +7,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/). Versioning: fork versio
 ## [0.2.4] — 2026-09-03
 
 ### Added
-- **Hermes-bridge fallback for models with no browser key.** When Hermes's active model is unreachable from the browser (e.g. claude via an OAuth subscription — no portable API key exists), panel messages now route through the Hermes bridge (`hermes chat` on the active profile) instead of erroring or silently using a stale provider. Relay spawns `hermes chat` with **no `-p` profile pin**, so it follows the user's active model in Hermes, claude included.
+- **Hermes-bridge fallback for models with no browser key.** When Hermes's active model is unreachable from the browser (e.g. claude via an OAuth subscription — no portable API key exists), panel messages now route through the Hermes bridge (`hermes chat` on the active profile) instead of erroring or silently using a stale provider. Relay spawns `hermes chat` with **no `-p` profile pin**, so it follows the model Joe has active in Hermes, claude included.
 - **Bridge-fallback toast** (`chrome.notifications`): one-time "Bridge fallback" alert per engagement, explaining why the reply is slower; resets when a keyed provider ports back in.
 - `GET_STATE` now exposes `bridgeFallback`, `hermesPortNote`, `hermesActiveModel`, `hermesActiveProvider` for UI.
 
@@ -91,4 +91,4 @@ full changelog.)
 
 ## License
 
-MIT. Apollo © 2026 Apollo contributors. OpenSidekick © 2026 its contributors. See [LICENSE](LICENSE).
+MIT. Apollo is a fork of OpenSidekick. OpenSidekick © 2026 its contributors. See [LICENSE](LICENSE).

@@ -316,7 +316,7 @@ async function handleRunTask(msg) {
   // Hermes's ACTIVE model has no browser-usable key (e.g. claude via OAuth
   // subscription) → the lean direct loop can't call it. Fall back to the
   // Hermes bridge: the relay runs `hermes chat` with the DEFAULT profile, so
-  // it follows whatever model the user has active — claude included. Toast once per
+  // it follows whatever model Joe has active — claude included. Toast once per
   // engagement so he knows why it's slower and what it's using.
   const fallbackNote = config && config.hermesPortNote;
   if (fallbackNote) {
