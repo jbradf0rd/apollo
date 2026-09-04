@@ -214,29 +214,44 @@ function runHermesChat(id, text, conn) {
 function readHermesProvider() {
   try {
     const home = process.env.HERMES_HOME || path.join(os.homedir(), "AppData", "Local", "hermes");
-    const cfg = readFileSync(path.join(home, "config.yaml"), "utf8");
-    const block = (cfg.match(/^model:\s*\n([\s\S]*?)(?=\n\w|$)/m) || [])[1] || "";
+    // Read the PINNED apollo profile — never the default profile. The default
+    // profile's active model changes as Joe switches models mid-chat (e.g. to
+    // claude-opus), which would mismatch the deepseek endpoint. The apollo
+    // profile is a stable set: provider + model + key that always agree.
+    const profile = process.env.APOLLO_HERMES_PROFILE || "apollo";
+    const cfgPath = path.join(home, "profiles", profile, "config.yaml");
+    const envDir = path.join(home, "profiles", profile);
+    const cfg = readFileSync(cfgPath, "utf8").replace(/\r/g, "");
+    const block = (cfg.match(/^model:[ \t]*\n((?:[ \t]+.*\n?)*)/m) || [])[1] || "";
     const grab = (k) => {
-      const m = block.match(new RegExp("^\\s{2}" + k + ":\\s*([^\\n]+)", "m"));
+      const m = block.match(new RegExp("^ {2}" + k + ":[ \\t]*([^\\n]+)", "m"));
       return m ? m[1].trim() : "";
     };
     const provider = grab("provider") || "deepseek";
     const model = grab("default") || "";
     let baseUrl = "", apiKey = "";
 
+    // Read the profile's own .env first, then fall back to the shared root .env.
+    const readEnv = (dir) => {
+      try { return readFileSync(path.join(dir, ".env"), "utf8"); } catch { return ""; }
+    };
+    const envText = readEnv(envDir).replace(/\r/g, "") + "\n" + readEnv(home).replace(/\r/g, "");
+    const getEnv = (k) => {
+      const m = envText.match(new RegExp("^" + k + "=(.*)$", "m"));
+      return m ? m[1].trim() : "";
+    };
+
     if (provider === "deepseek") {
-      const env = readFileSync(path.join(home, ".env"), "utf8");
-      const getEnv = (k) => {
-        const m = env.match(new RegExp("^" + k + "=(.*)$", "m"));
-        return m ? m[1].trim() : "";
-      };
       baseUrl = getEnv("DEEPSEEK_BASE_URL") || "https://api.deepseek.com/v1";
       apiKey = getEnv("DEEPSEEK_API_KEY");
+    } else if (provider === "openai") {
+      baseUrl = getEnv("OPENAI_BASE_URL") || "https://api.openai.com/v1";
+      apiKey = getEnv("OPENAI_API_KEY");
     } else if (provider === "custom") {
       baseUrl = grab("base_url");
       apiKey = grab("api_key") || "local";
     } else {
-      log("provider port: unsupported active provider", provider, "(left the extension's provider unchanged)");
+      log("provider port: unsupported provider", provider, "(left the extension's provider unchanged)");
       return null;
     }
 
