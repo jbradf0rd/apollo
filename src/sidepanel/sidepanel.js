@@ -157,6 +157,15 @@ function updateConfiguredUI(isConfigured) {
 }
 
 async function refreshConfigured() {
+  // Ask the worker — its answer includes the Hermes-bridge override (no model
+  // key needed while the relay is up). Reading only local storage here used to
+  // clobber that override and bounce every message to Settings.
+  const state = await send({ type: MSG.GET_STATE }).catch(() => null);
+  if (state) {
+    updateConfiguredUI(!!state.configured);
+    setAutonomyUI(state.autonomy || "ask");
+    return;
+  }
   let cfg = {};
   try {
     const raw = await chrome.storage.local.get(STORAGE_KEY);

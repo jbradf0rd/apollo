@@ -8,7 +8,7 @@ import { runAgent } from "./agent.js";
 import { detachAll } from "./cdp.js";
 import { ensureContentScript } from "./tools.js";
 import { applyMigrations } from "./migrations.js";
-import { startRelay, isRelayOpen, sendRelayChat, sendRelayNewChat, sendRelayChatAbort } from "./relay.js";
+import { startRelay, isRelayOpen, isRelayConnecting, sendRelayChat, sendRelayNewChat, sendRelayChatAbort } from "./relay.js";
 
 // -------------------------------------------------------------------------
 // State
@@ -264,12 +264,12 @@ async function handleGetState() {
   await ensureConversationLoaded();
   const seed = pendingSeed;
   pendingSeed = null;
-  // With the Hermes bridge up, the panel is "configured" even with no model
-  // key — chat is routed to Hermes instead of a raw provider.
-  const hermes = isRelayOpen();
+  // Apollo is Hermes-only: no model key in the browser, ever. The panel is
+  // always "configured"; if the bridge is down the run errors clearly.
+  const hermes = isRelayOpen() || isRelayConnecting();
   return {
     ok: true,
-    configured: !!(provider && config.activeModel) || hermes,
+    configured: true,
     hermes,
     providerName: provider ? provider.name : null,
     model: config.activeModel || null,
@@ -309,62 +309,16 @@ async function handleRunTask(msg) {
   conversation.push({ role: "user", content: msg.task });
   emit({ kind: "user_echo", text: msg.task });
 
-  // Hermes mode: the bridge is up, so the panel's brain is a Hermes session
-  // (memory, skills, MCP stack, and this extension's own tools on tap) — no
-  // model key needed in the browser.
-  if (isRelayOpen()) {
-    runHermesChatTask(msg.task);
-    return { ok: true };
-  }
-
-  const { config, provider } = await getActiveProvider();
-  if (!provider) {
-    emit({ kind: "error", error: "No provider configured. Open Settings to add one." });
+  // Apollo is Hermes-only: the panel's brain is a Hermes session (memory,
+  // skills, MCP stack, and this extension's own browser tools on tap). There
+  // is no built-in model/provider path anymore.
+  if (!isRelayOpen()) {
+    emit({ kind: "error", error: "Hermes bridge offline — start it with: node bridge/relay.mjs" });
     emit({ kind: "idle" });
-    return { ok: false, error: "not-configured" };
-  }
-  if (!config.activeModel) {
-    emit({ kind: "error", error: "No model selected. Open Settings to choose a model." });
-    emit({ kind: "idle" });
-    return { ok: false, error: "no-model" };
+    return { ok: false, error: "bridge-offline" };
   }
 
-  const controller = new AbortController();
-  currentRun = { controller };
-
-  const initialTabId = await getActiveContentTabId();
-  if (initialTabId == null) {
-    emit({ kind: "error", error: "Could not find an active tab to work on." });
-    emit({ kind: "idle" });
-    currentRun = null;
-    return { ok: false, error: "no-tab" };
-  }
-
-  // Keep the worker alive for the whole run (incl. while awaiting prompts).
-  startKeepAlive();
-
-  // Run the loop (do not await the sendResponse on it — events stream async).
-  runAgent({
-    conversation,
-    config,
-    provider,
-    initialTabId,
-    signal: controller.signal,
-    emit,
-    requestPermission,
-    requestPlanApproval,
-    saveSitePermission: (origin, value) => setSitePermission(origin, value),
-  })
-    .catch((e) => emit({ kind: "error", error: String(e.message || e) }))
-    .finally(async () => {
-      // Detach the debugger (removes the "debugging this browser" banner).
-      await detachAll().catch(() => {});
-      await persistConversation(); // so the chat survives worker termination
-      currentRun = null;
-      if (!recording) stopKeepAlive(); // an active recording still needs it
-      emit({ kind: "idle" });
-    });
-
+  runHermesChatTask(msg.task);
   return { ok: true };
 }
 
@@ -488,9 +442,8 @@ async function runScheduledTask(task) {
     notify(task.name, "Skipped — another task was already running.");
     return;
   }
-  const { config, provider } = await getActiveProvider();
-  if (!provider || !config.activeModel) {
-    notify(task.name, "Skipped — no model configured.");
+  if (!isRelayOpen()) {
+    notify(task.name, "Skipped — Hermes bridge offline (node bridge/relay.mjs).");
     return;
   }
 
@@ -515,34 +468,17 @@ async function runScheduledTask(task) {
   const controller = new AbortController();
   currentRun = { controller };
   startKeepAlive();
-  const conversation = [{ role: "user", content: task.prompt }];
   let summary = "";
   try {
-    await runAgent({
-      conversation,
-      // Unattended runs act without asking (no one is watching to approve).
-      config: { ...config, settings: { ...config.settings, autonomy: "auto" } },
-      provider,
-      initialTabId: tabId,
-      signal: controller.signal,
-      emit: (ev) => {
-        if (ev.kind === "finish" && ev.summary) summary = ev.summary;
-        else if (ev.kind === "assistant_end" && ev.content) summary = ev.content;
-        else if (ev.kind === "error" && !summary) summary = "Error: " + ev.error;
-      },
-      // No UI to answer prompts — sensitive actions are declined (safe default).
-      requestPermission: async () => "decline",
-      requestPlanApproval: async () => false,
-      saveSitePermission: () => {},
-    });
+    const res = await sendRelayChat(task.prompt, { signal: controller.signal });
+    summary = res.ok ? (res.text || "Done.") : "Error: " + (res.error || "chat failed");
   } catch (e) {
     summary = "Error: " + (e.message || e);
   } finally {
-    await detachAll().catch(() => {});
     currentRun = null;
     if (!recording) stopKeepAlive();
   }
-  notify(task.name || "Scheduled task", summary || "Done.");
+  notify(task.name || "Scheduled task", summary);
 }
 
 function notify(title, message) {
@@ -550,7 +486,7 @@ function notify(title, message) {
     chrome.notifications.create({
       type: "basic",
       iconUrl: chrome.runtime.getURL("icons/icon128.png"),
-      title: "OpenSidekick — " + (title || "Scheduled task"),
+      title: "Apollo — " + (title || "Scheduled task"),
       message: String(message || "").slice(0, 400),
     });
   } catch {

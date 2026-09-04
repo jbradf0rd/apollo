@@ -239,6 +239,13 @@ export function isRelayOpen() {
   return !!(ws && ws.readyState === WebSocket.OPEN);
 }
 
+// True while the relay is up OR a reconnect is in flight — used for UI state
+// so a freshly-restarted worker doesn't look "unconfigured" for the second it
+// takes the socket to come up. Actual chat/tool calls still gate on OPEN.
+export function isRelayConnecting() {
+  return !!(ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING));
+}
+
 function settleChat(msg) {
   if (msg.t === "chat_delta") {
     const p = chatPending.get(msg.id);
