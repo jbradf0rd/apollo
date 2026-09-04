@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.8]
+### Changed
+- **Icons**: replaced the stock OpenSidekick icon with an Apollo **lyre** mark — bold black line-art lyre (curved arms, vertical strings, soundbox base) in Hermes's monochrome ink-stamp style, on transparent. Regenerated at 16/32/48/128/256; added a 256 icon to the manifest and favicon links on the panel + Settings pages.
+
+---
 ## [0.2.7] — 2026-09-03
 
 ### Changed
