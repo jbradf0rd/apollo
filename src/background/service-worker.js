@@ -22,6 +22,7 @@ let permissionSeq = 0;
 let pendingSeed = null; // task text queued by a context-menu action
 let recording = null; // { steps, tabId, startUrl, lastClickAt, lastUrl }
 let keepAliveTimer = null;
+let fallbackNotified = false; // toast once per fallback engagement (reset when a keyed provider ports in)
 
 // MV3 terminates an idle service worker after ~30s. While a task is running —
 // especially while we're parked awaiting the user's answer to a permission or
@@ -266,11 +267,17 @@ async function handleGetState() {
   pendingSeed = null;
   // Configured when a model/provider is present — the bridge ports Hermes's
   // active model in on connect, so this turns true once the relay is up.
+  // bridgeFallback=true means Hermes is on a model with no browser key and the
+  // panel is routed through the (slower) Hermes bridge instead of direct.
   const hermes = isRelayOpen() || isRelayConnecting();
   return {
     ok: true,
     configured: !!(provider && config.activeModel),
     hermes,
+    bridgeFallback: !!config.hermesPortNote,
+    hermesPortNote: config.hermesPortNote || null,
+    hermesActiveModel: config.hermesActiveModel || null,
+    hermesActiveProvider: config.hermesActiveProvider || null,
     providerName: provider ? provider.name : null,
     model: config.activeModel || null,
     autonomy: config.settings.autonomy,
@@ -304,19 +311,33 @@ function conversationHistory() {
 async function handleRunTask(msg) {
   if (currentRun) return { ok: false, error: "A task is already running." };
 
-  // Apollo is a LEAN browser agent: its built-in loop talks straight to the
-  // model (provider ported in from Hermes over the bridge), so the panel is
-  // fast and self-contained. Hermes still drives the browser via the MCP path.
   const { config, provider } = await getActiveProvider();
-  if (!provider) {
-    // Distinguish "bridge down" from "Hermes is on a model we can't reach".
-    const note = config && config.hermesPortNote;
-    if (note) {
-      const m = (config.hermesActiveModel || "the active model");
-      emit({ kind: "error", error: "Following Hermes: it's set to " + m + ", but " + note + " Switch Hermes to a keyed provider (deepseek/gemini/openai) or add that provider's API key to Hermes's .env." });
-    } else {
-      emit({ kind: "error", error: "No model provider yet — start the Hermes bridge (node bridge/relay.mjs) and it will pull in Hermes's model." });
+
+  // Hermes's ACTIVE model has no browser-usable key (e.g. claude via OAuth
+  // subscription) → the lean direct loop can't call it. Fall back to the
+  // Hermes bridge: the relay runs `hermes chat` with the DEFAULT profile, so
+  // it follows whatever model Joe has active — claude included. Toast once per
+  // engagement so he knows why it's slower and what it's using.
+  const fallbackNote = config && config.hermesPortNote;
+  if (fallbackNote) {
+    if (!fallbackNotified) {
+      fallbackNotified = true;
+      notify("Bridge fallback", "Hermes's active model has no browser key — using the Hermes bridge. (" + fallbackNote + ")");
     }
+    if (msg.newChat) await clearConversation();
+    else await ensureConversationLoaded();
+    conversation.push({ role: "user", content: msg.task });
+    emit({ kind: "user_echo", text: msg.task });
+    runHermesChatTask(msg.task);
+    return { ok: true };
+  }
+  fallbackNotified = false;
+
+  // Lean direct-model path: the built-in loop talks straight to the ported
+  // model, so the panel is fast and self-contained. Hermes still drives the
+  // browser via the MCP path regardless.
+  if (!provider) {
+    emit({ kind: "error", error: "No model provider yet — start the Hermes bridge (node bridge/relay.mjs) and it will pull in Hermes's model." });
     emit({ kind: "idle" });
     return { ok: false, error: "not-configured" };
   }

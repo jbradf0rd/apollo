@@ -89,8 +89,12 @@ const chatState = {
   sessionKey: "apollo-panel",
 };
 const HERMES_CMD = process.env.APOLLO_HERMES_CMD || "hermes";
-const HERMES_PROFILE = process.env.APOLLO_HERMES_PROFILE || "apollo"; // dedicated lean profile (browser tools + local model only)
-const HERMES_MODEL = process.env.APOLLO_HERMES_MODEL || ""; // override the profile default (empty = profile's model)
+// "" (default) = follow Hermes's ACTIVE provider via the default profile —
+// this channel now exists ONLY for the bridge fallback (models with no
+// browser key, e.g. claude via OAuth), so it must match whatever Joe has
+// selected, not a pinned profile. Set APOLLO_HERMES_PROFILE to pin.
+const HERMES_PROFILE = process.env.APOLLO_HERMES_PROFILE || "";
+const HERMES_MODEL = process.env.APOLLO_HERMES_MODEL || ""; // override (empty = follow config)
 const CHAT_MAX_MS = 420000;
 
 function sendToExt(msg) {
@@ -138,9 +142,12 @@ function handleChatMessage(conn, msg) {
 function runHermesChat(id, text, conn) {
   // -Q: quiet one-shot — stdout carries ONLY the assistant's reply (no banners
   // or session summary), so deltas can stream straight to the panel.
-  // The dedicated "apollo" profile gives it a local model + only the browser
-  // tools (no cloud MCP servers, so no OAuth re-auth stalls per message).
-  const args = ["-p", HERMES_PROFILE, "chat", "--query-file", "-", "-Q", "--continue", chatState.sessionKey, "--create-if-missing"];
+  // No -p profile pin by default: the chat channel serves the BRIDGE FALLBACK
+  // (active model has no browser key, e.g. claude), which must use Joe's ACTIVE
+  // provider — including claude via its OAuth subscription.
+  const args = [];
+  if (HERMES_PROFILE) args.push("-p", HERMES_PROFILE);
+  args.push("chat", "--query-file", "-", "-Q", "--continue", chatState.sessionKey, "--create-if-missing");
   if (HERMES_MODEL) args.push("-m", HERMES_MODEL);
   log("spawning hermes:", HERMES_CMD, args.join(" "));
   let child;
