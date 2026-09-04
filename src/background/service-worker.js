@@ -8,6 +8,7 @@ import { runAgent } from "./agent.js";
 import { detachAll } from "./cdp.js";
 import { ensureContentScript } from "./tools.js";
 import { applyMigrations } from "./migrations.js";
+import { startRelay } from "./relay.js";
 
 // -------------------------------------------------------------------------
 // State
@@ -109,11 +110,13 @@ chrome.runtime.onInstalled.addListener(() => {
   });
   runMigrations();
   reconcileAlarms();
+  startRelay();
 });
 
 chrome.runtime.onStartup.addListener(() => {
   runMigrations();
   reconcileAlarms();
+  startRelay();
 });
 
 // Apply one-time config migrations to an existing stored config. Does nothing on
