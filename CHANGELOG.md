@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.7] — 2026-09-03
+
+### Changed
+- **Settings: "MCP tool servers" section removed.** The panel agent's own MCP client was unusable by design here — browser extensions can only reach streamable-HTTP MCP servers, while all real MCPs (zoho, kanboard, homelab) are local stdio servers unreachable from the extension, and loading them would duplicate what Hermes already owns. Apollo is the browser hand; MCPs live in Hermes. (The agent-loop MCP code path in `agent.js`/`mcp.js` stays dormant for future local-HTTP use.)
+
 ## [0.2.6] — 2026-09-03
 
 ### Changed

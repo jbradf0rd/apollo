@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Apollo — Hermes-Driven Browser Agent",
   "short_name": "Apollo",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "An AI browser agent whose hands live in your browser and whose brain is your Hermes agent. Fork of OpenSidekick.",
   "author": "jbradf0rd",
   "minimum_chrome_version": "116",
