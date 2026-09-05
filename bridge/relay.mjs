@@ -41,18 +41,22 @@ const server = http.createServer((req, res) => {
 const hub = attachWs(server);
 
 let ext = null; // { conn, tools, mutating, name }
+const clients = new Set(); // all connected clients (extension + control/MCP)
 let nextCallId = 1;
 const pending = new Map(); // callId -> control conn
 
 let connCount = 0;
 hub.on("connection", (conn) => {
   connCount++;
+  clients.add(conn);
   conn.on("text", (raw) => handleMessage(conn, raw));
   conn.on("close", () => {
     connCount--;
+    clients.delete(conn);
     if (ext && ext.conn === conn) {
       ext = null;
       log("extension disconnected");
+      broadcastControl({ t: "ext_state", connected: false, tools: 0 });
       // Fail in-flight calls that were waiting on the extension.
       for (const [id, entry] of [...pending]) {
         pending.delete(id);
@@ -101,7 +105,11 @@ const CHAT_MAX_MS = 420000;
 // One file per conversation (rotated when the extension starts a new chat),
 // overwritten each turn so the file is always the latest full transcript.
 function hermesHomeDir() {
-  return process.env.HERMES_HOME || path.join(os.homedir(), "AppData", "Local", "hermes");
+  if (process.env.HERMES_HOME) return process.env.HERMES_HOME;
+  // Windows: %USERPROFILE%\AppData\Local\hermes ; Linux/macOS: ~/.hermes
+  return process.platform === "win32"
+    ? path.join(os.homedir(), "AppData", "Local", "hermes")
+    : path.join(os.homedir(), ".hermes");
 }
 const ARTIFACTS_DIR = process.env.APOLLO_ARTIFACTS_DIR || path.join(hermesHomeDir(), "artifacts", "apollo-panel");
 let artifactCurrent = null; // { convoId, file }
@@ -249,7 +257,7 @@ function runHermesChat(id, text, conn, quiet) {
 // caller can tell Joe honestly instead of silently substituting another model.
 function readHermesProvider() {
   try {
-    const home = process.env.HERMES_HOME || path.join(os.homedir(), "AppData", "Local", "hermes");
+    const home = hermesHomeDir();
     // DEFAULT profile = what Joe selects in his main chat. Follow it. (An env
     // override is allowed for a pinned setup, but the default is to follow.)
     const profile = process.env.APOLLO_HERMES_PROFILE || "";
@@ -265,7 +273,6 @@ function readHermesProvider() {
     const provider = (grab("provider") || "deepseek").toLowerCase();
     const model = grab("default") || "";
     const cfgBase = grab("base_url");
-    const cfgKey = grab("api_key");
 
     // .env: profile-local first (if pinned), then shared root .env.
     const readEnv = (dir) => {
@@ -290,22 +297,22 @@ function readHermesProvider() {
         apiKey = getEnv("ANTHROPIC_API_KEY"); // OAuth-based subscriptions have NONE
         break;
       case "deepseek":
-        baseUrl = getEnv("DEEPSEEK_BASE_URL") || "https://api.deepseek.com/v1";
+        baseUrl = cfgBase && cfgBase !== "local" ? cfgBase : (getEnv("DEEPSEEK_BASE_URL") || "https://api.deepseek.com/v1");
         apiKey = getEnv("DEEPSEEK_API_KEY");
         break;
       case "gemini":
       case "google":
         // Gemini's OpenAI-compatible endpoint.
-        baseUrl = getEnv("GEMINI_BASE_URL") || "https://generativelanguage.googleapis.com/v1beta/openai";
+        baseUrl = cfgBase && cfgBase !== "local" ? cfgBase : (getEnv("GEMINI_BASE_URL") || "https://generativelanguage.googleapis.com/v1beta/openai");
         apiKey = getEnv("GEMINI_API_KEY");
         break;
       case "openai":
-        baseUrl = getEnv("OPENAI_BASE_URL") || "https://api.openai.com/v1";
+        baseUrl = cfgBase && cfgBase !== "local" ? cfgBase : (getEnv("OPENAI_BASE_URL") || "https://api.openai.com/v1");
         apiKey = getEnv("OPENAI_API_KEY");
         break;
       case "custom":
         baseUrl = cfgBase;
-        apiKey = cfgKey || "local"; // local endpoints accept any key
+        apiKey = "local"; // local endpoints accept any key
         break;
       default:
         log("provider port: unknown provider", provider, "(left extension provider unchanged)");
@@ -331,6 +338,13 @@ function send(conn, obj) {
     conn.send(JSON.stringify(obj));
   } catch (e) {
     log("send failed:", e.message);
+  }
+}
+
+function broadcastControl(msg) {
+  for (const c of clients) {
+    if (ext && c === ext.conn) continue;
+    send(c, msg);
   }
 }
 
@@ -362,6 +376,7 @@ function handleMessage(conn, raw) {
       log(`extension registered: ${ext.tools.length} tools, ${ext.mutating.length} mutating`);
       // Announce tools to any control client that asked while we had none.
       send(conn, { t: "reg_ack", tools: ext.tools.length });
+      broadcastControl({ t: "ext_state", connected: true, tools: ext.tools.length });
       // Port Hermes's active model/provider into the extension so the lean
       // panel agent talks straight to the same model Hermes uses.
       const provider = readHermesProvider();
@@ -376,7 +391,11 @@ function handleMessage(conn, raw) {
       return;
     }
     case "tools": {
-      if (!ext) return send(conn, { t: "res", id: msg.id, ok: false, error: "no extension connected" });
+      // No extension connected is a VALID state, not an error: return an empty
+      // list and let ext_state -> tools/list_changed refresh the client when
+      // the extension appears. (Returning an error here made Hermes tear down
+      // and respawn the MCP server every ~14s while the bridge was idle.)
+      if (!ext) return send(conn, { t: "res", id: msg.id, ok: true, result: { tools: [], mutating: [] } });
       // Request/response replies are always shaped { t:"res", id, ok, result|error }
       // so control clients (the MCP server) settle them uniformly.
       return send(conn, { t: "res", id: msg.id, ok: true, result: { tools: ext.tools, mutating: ext.mutating } });
@@ -396,7 +415,16 @@ function handleMessage(conn, raw) {
       if (!origin) return; // late reply — caller gone
       pending.delete(msg.id);
       log(`tool result #${msg.id}: ok=${msg.ok !== false}`);
-      return send(origin.conn, { t: "res", id: origin.clientId, ok: msg.ok !== false, result: msg.result, error: msg.error });
+      // The extension nests its failure detail inside `result` (shape
+      // {ok:false, result:{ok:false, error}}); surface it so callers see the
+      // real reason instead of a generic "tool failed".
+      return send(origin.conn, {
+        t: "res",
+        id: origin.clientId,
+        ok: msg.ok !== false,
+        result: msg.result,
+        error: msg.error || (msg.result && msg.result.error) || undefined,
+      });
     }
     default:
       if (msg.id != null) return send(conn, { t: "res", id: msg.id, ok: false, error: "unknown message type: " + msg.t });

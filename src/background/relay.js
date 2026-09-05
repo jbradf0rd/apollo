@@ -19,6 +19,7 @@
 import { TOOL_DEFS, executeTool } from "./tools.js";
 import { MUTATING_TOOLS } from "./permissions.js";
 import { loadConfig, saveConfig } from "./storage.js";
+import { setHermesKey } from "./hermes-key.js";
 
 const WS_URL = "ws://127.0.0.1:8765/";
 const KEEPALIVE_MS = 20000;
@@ -340,6 +341,10 @@ async function applyHermesProvider(msg) {
     const type = msg.type === "anthropic" ? "anthropic" : "openai";
     const reachable = msg.reachable !== false; // default true if the relay omitted it
 
+    // The key lives ONLY in memory (see hermes-key.js) — it is never written
+    // to chrome.storage, so the "no key stored in the browser" promise holds.
+    setHermesKey(apiKey);
+
     // If Hermes's active model has no portable key (e.g. claude via OAuth), we
     // CANNOT call it directly from the browser. Record why so the panel can say
     // so, and DON'T switch the active provider away from whatever still works.
@@ -354,11 +359,13 @@ async function applyHermesProvider(msg) {
 
     const cur = (config.providers || []).find((p) => p.id === id);
     // Dedupe: skip the write when nothing changed. This also breaks the
-    // save → storage.onChanged → register → provider loop.
+    // save → storage.onChanged → register → provider loop. The key is NOT
+    // part of the comparison (it isn't persisted) — but it has already been
+    // refreshed in memory above, so a key rotation with no other change is
+    // still picked up.
     if (
       cur &&
       cur.baseUrl === baseUrl &&
-      cur.apiKey === apiKey &&
       cur.type === type &&
       config.activeProviderId === id &&
       config.activeModel === model &&
@@ -372,7 +379,7 @@ async function applyHermesProvider(msg) {
       name: "Hermes (" + (msg.provider || "model") + ")",
       type,
       baseUrl,
-      apiKey,
+      apiKey: "", // deliberately keyless — the key lives in module memory
     });
     config.providers = providers;
     config.activeProviderId = id;

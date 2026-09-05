@@ -463,13 +463,13 @@ async function main() {
     // in auto mode; after allowing once, the click goes through. ---
     // (C) Reset the persistent overlay marker, run the task, then confirm the
     // overlay was shown (marker set) and removed (element gone). Race-free.
-    await testPage.evaluate(() => document.documentElement.removeAttribute("data-opensidekick-shown"));
+    await testPage.evaluate(() => document.documentElement.removeAttribute("data-apollo-shown"));
     const buy = await drive("Buy the item on this page.");
     const buyOut = await testPage.$eval("#out", (el) => el.textContent).catch(() => "");
     check(buy.perms.some((p) => p.sensitive), "safety: purchase click triggered a sensitive confirmation (even in auto mode)");
     check(buyOut === "bought", `safety: after confirming, the purchase click went through (got "${buyOut}")`);
-    const overlayShown = await testPage.evaluate(() => document.documentElement.hasAttribute("data-opensidekick-shown"));
-    const overlayGone = await testPage.evaluate(() => !document.getElementById("opensidekick-overlay"));
+    const overlayShown = await testPage.evaluate(() => document.documentElement.hasAttribute("data-apollo-shown"));
+    const overlayGone = await testPage.evaluate(() => !document.getElementById("apollo-overlay"));
     check(overlayShown, "overlay: activity indicator was shown while the agent worked");
     check(overlayGone, "overlay: indicator was removed when the task ended");
 
@@ -680,10 +680,10 @@ async function main() {
 
     await runTask("The magic word is plum. Acknowledge.", true);
     const persisted = await optPage.evaluate(async () => {
-      const raw = await chrome.storage.session.get("opensidekick.conversation.v1");
+      const raw = await chrome.storage.local.get("opensidekick.conversation.v1");
       return raw["opensidekick.conversation.v1"] || null;
     });
-    check(Array.isArray(persisted) && persisted.length >= 2, `context: conversation persisted to storage.session (${persisted ? persisted.length : 0} msgs)`);
+    check(Array.isArray(persisted) && persisted.length >= 2, `context: conversation persisted to storage.local (${persisted ? persisted.length : 0} msgs)`);
 
     // Kill the service worker like Chrome does between prompts (close its CDP
     // target), and mark the old worker so we can PROVE the next one is fresh.
@@ -830,7 +830,7 @@ async function main() {
       return chrome.storage.local.set({ [key]: cfg });
     }, [STORAGE_KEY, { ...config, settings: { ...config.settings, autonomy: "auto", siteAccess: "allowlist" } }, new URL(base).origin]);
     const al3 = await drive("Search for cats on this page.");
-    check(al3.perms.length === 0 && al3.events.some((e) => e.kind === "tool_end" && /blocked OpenSidekick/i.test(e.summary || "")),
+    check(al3.perms.length === 0 && al3.events.some((e) => e.kind === "tool_end" && /blocked Apollo/i.test(e.summary || "")),
       "allowlist: a blocked site refuses tools without prompting");
 
     // (4) The panel's site chip shows the state and trusts a site in two clicks.
@@ -881,7 +881,7 @@ async function main() {
     const noticeVisible = await gatePanel.$eval("#not-configured", (el) => !el.hidden).catch(() => false);
     const placeholder = await gatePanel.$eval("#input", (el) => el.placeholder).catch(() => "");
     check(noticeVisible, "gate: unconfigured side panel shows the 'connect a model' notice");
-    check(/settings/i.test(placeholder), `gate: composer prompts to add a model (placeholder "${placeholder}")`);
+    check(/Hermes bridge/i.test(placeholder), `gate: composer prompts to add a model (placeholder "${placeholder}")`);
 
     // (3) The composer's approval selector sets autonomy without opening Settings.
     const initialMode = await gatePanel.$eval("#autonomy .seg.active", (el) => el.dataset.mode).catch(() => "");

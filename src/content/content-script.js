@@ -297,6 +297,32 @@
     }
     target.dispatchEvent(new KeyboardEvent("keydown", init));
     target.dispatchEvent(new KeyboardEvent("keyup", init));
+    // Synthetic keyboard events can't produce text (untrusted events — the
+    // browser suppresses their default actions). For a plain printable key on
+    // a text field, insert the character natively so the value really updates.
+    const printable = typeof key === "string" && key.length === 1 && !init.ctrlKey && !init.metaKey && !init.altKey;
+    if (printable) {
+      const tag = target.tagName ? target.tagName.toLowerCase() : "";
+      if (target.isContentEditable) {
+        try {
+          document.execCommand("insertText", false, key);
+        } catch {
+          target.textContent = (target.textContent || "") + key;
+          target.dispatchEvent(new InputEvent("input", { bubbles: true, data: key }));
+        }
+      } else if (tag === "input" || tag === "textarea") {
+        const start = typeof target.selectionStart === "number" ? target.selectionStart : (target.value || "").length;
+        const end = typeof target.selectionEnd === "number" ? target.selectionEnd : (target.value || "").length;
+        setNativeValue(target, target.value.slice(0, start) + key + target.value.slice(end));
+        try {
+          target.setSelectionRange(start + 1, start + 1);
+        } catch {
+          /* some inputs don't support selection */
+        }
+        target.dispatchEvent(new Event("input", { bubbles: true }));
+        target.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    }
     return { ok: true, pressed: keys.join("+") };
   }
 

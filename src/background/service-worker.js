@@ -126,6 +126,11 @@ chrome.runtime.onStartup.addListener(() => {
 // back until Chrome restarts. startRelay is idempotent.
 startRelay();
 
+// Self-healing wakeup: if the relay dropped long enough that MV3 killed the
+// worker, a periodic alarm revives it to reconnect — the bridge comes back
+// without any user interaction. (Idempotent; same period on every spin-up.)
+chrome.alarms.create("apollo-relay-keepalive", { periodInMinutes: 1 });
+
 // Apply one-time config migrations to an existing stored config. Does nothing on
 // a fresh install (no stored config yet), so it can't clobber a config that's
 // being written concurrently at first run.
@@ -143,6 +148,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === "apollo-relay-keepalive") { startRelay(); return; }
   if (alarm.name.startsWith(SCHED_PREFIX)) runScheduledById(alarm.name.slice(SCHED_PREFIX.length));
 });
 

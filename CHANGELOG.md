@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.2.9] — 2026-09-05
+
+### Changed
+- **New icon + favicon.** Replaced the line-art lyre mark with the gold-lyre-on-navy-circle mark (`apollo-favicon.jpg`), regenerated at 16/32/48/128/256 and applied to the toolbar button, manifest icons, and the panel + Settings favicon links.
+- **README intro**: added the engraved-lyre illustration and the note that Apollo was Hermes' brother, most famous for his lyre. Removed the earlier icon mockups and scratch media.
+
+### Added
+- `bridge/install.mjs` — cross-platform relay supervisor (Windows schtasks watchdog / Linux `systemd --user` / macOS launchd), idempotent.
+- Relay + MCP server: `ext_state` broadcast + `tools/list_changed` so Hermes's browser-tool list refreshes when the extension connects/disconnects — and now also on every mcp-server WS (re)connect, so a relay bounce can never leave Hermes with a stale tool list.
+- `src/background/hermes-key.js` — the Hermes-ported API key lives in module memory only; it is never persisted to `chrome.storage`.
+- `bridge/test-relay.mjs` — chat fallback transport test (real `hermes chat` spawn, pinned to the `apollo` profile via `APOLLO_HERMES_PROFILE`).
+- MV3 self-heal: a 1-minute `apollo-relay-keepalive` alarm wakes the service worker to reconnect after idle death — no user interaction needed.
+
+### Fixed
+- **Provider port key bug**: no longer reads `api_key` from Hermes `config.yaml` (it's a `local` sentinel — real keys live in `.env`); keys resolve from `.env` only. Previously the panel sent the literal string `local` to DeepSeek and got 401s.
+- **mcp-server WS hardening**: 5s handshake stall guard, per-socket close handlers, exit after 5 consecutive failed connects (Hermes respawns a fresh process — long-lived processes can get wedged in a connect-error loop), and tool-error detail preserved end-to-end (no more generic "tool failed").
+- **No-extension state**: the relay now returns an empty tool list instead of an error when no extension is registered — Hermes no longer tears down and respawns the MCP server every ~14s while the bridge is idle.
+- **Tooling**: `npm run check` rewritten cross-platform (the bash `for` loop broke under cmd.exe on Windows); `npm run zip` uses a cross-platform Node script (PowerShell Compress-Archive / zip); stale upstream leftovers removed (indigo-ring icon generator, Web Store screenshots/promo scripts, dead demo/video script entries); package description updated to Apollo.
+- **`press_keys` text insertion**: a plain printable key on a text field now inserts the character natively (synthetic keyboard events can't produce text — untrusted events suppress default actions); non-printable keys still dispatch as before for page shortcuts.
+- **e2e suite** updated for the fork's intentional changes (apollo-overlay ids, storage.local persistence, "blocked Apollo" message, Hermes-bridge composer copy).
+
 ## [0.2.8]
 ### Changed
 - **Icons**: replaced the stock OpenSidekick icon with an Apollo **lyre** mark — bold black line-art lyre (curved arms, vertical strings, soundbox base) in Hermes's monochrome ink-stamp style, on transparent. Regenerated at 16/32/48/128/256; added a 256 icon to the manifest and favicon links on the panel + Settings pages.

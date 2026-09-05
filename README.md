@@ -1,11 +1,13 @@
 # Apollo — Hermes-Driven Browser Agent
 
-> Brother to [Hermes Agent](https://hermes-agent.nousresearch.com): an AI browser agent whose **hands live in your browser** and whose **brain is your Hermes agent**.
+> Apollo is the brother to [Hermes Agent](https://hermes-agent.nousresearch.com): an AI browser agent whose **hands live in your browser** and whose **brain is your Hermes agent**. In Greek myth, Apollo was Hermes' brother, most famous for his lyre (thus the icon).
 > Fork of [OpenSidekick](https://github.com/esterhuizen/opensidekick).
+>
+> <img src="media/apollo-lyre.png" alt="An engraved lyre" width="180">
 
 Apollo is a Chrome extension that turns your real, logged-in browser into an agent workspace. It keeps the best of OpenSidekick — a lean browser-agent loop with click/type/read tools, approval modes, and vision — and rebuilds the brain around **Hermes**, your personal agent:
 
-- The **side panel** is a lean, fast browser agent whose model *follows whatever model you've selected in Hermes* — no API key ever stored in the browser.
+- The **side panel** is a lean, fast browser agent whose model *follows whatever model you've selected in Hermes* — no API key ever stored in the browser (the ported key is held in service-worker memory only).
 - **Hermes itself can drive the browser** from any session (desktop, Telegram, cron) through an MCP bridge, using the extension's 17 browser tools as its own hands.
 - **Conversations survive closing the panel — and Chrome.** No more "Claude for Chrome loses context" problem.
 
@@ -36,7 +38,7 @@ The boundary: Apollo adds the *browser-with-your-identity* surface. Plain text, 
 | | **OpenSidekick** (upstream) | **Apollo** (this fork) |
 |---|---|---|
 | Model selection | Picked in-extension (its own settings UI) | **Follows Hermes's active model** (ported over the local bridge) |
-| Keys in browser | Stored in extension storage | **Never** — the panel calls the provider directly with the key the *relay* supplies, or falls back through Hermes |
+| Keys in browser | Stored in extension storage | **Never** — the relay supplies the key to the service worker on connect; it lives in **memory only** (never written to extension storage), or the message falls back through Hermes |
 | Conversation storage | `chrome.storage.session` (clears on Chrome close) | `chrome.storage.local` (**survives close + restart**) |
 | Claude / OAuth-only providers | Requires a raw API key in the browser | **Automatic bridge fallback** — panel messages route through Hermes (which owns the OAuth subscription); toast alerts the user |
 | Hermes relationship | None | **Hermes drives the browser** via MCP (`mcp_apollo_*`, 17 tools) |
@@ -92,10 +94,12 @@ The panel's own chat is **independent** of that MCP path — it talks straight t
 ```bash
 # 1. Clone (or your own fork)
 git clone https://github.com/jbradf0rd/apollo.git
-cd openApollo
+cd apollo
 
-# 2. Start the relay (always-on bridge; survives while this terminal lives)
-node bridge/relay.mjs
+# 2. Install the relay supervisor (cross-platform watchdog, idempotent — run once)
+node bridge/install.mjs
+#    → starts the relay now and keeps it alive across reboots
+#    (or skip the supervisor and run: node bridge/relay.mjs)
 #    → "[apollo-relay] listening on ws://127.0.0.1:8765"
 ```
 
@@ -103,13 +107,13 @@ node bridge/relay.mjs
 4. Register the browser tools with Hermes (one time):
 
 ```bash
-printf 'Y\n' | hermes mcp add apollo --command node --args "C:\absolute\path\to\openApollo\bridge\mcp-server.mjs"
+printf 'Y\n' | hermes mcp add apollo --command node --args "C:\absolute\path\to\apollo\bridge\mcp-server.mjs"
 hermes mcp test apollo   # → 17 tools
 ```
 
 Now: type in the panel (it follows Hermes's active model), and from any Hermes chat you can say *"open the page I'm on and summarize it"* — Hermes drives the browser through the bridge.
 
-> The relay must be running for the provider port and the browser-tools bridge. On Windows, run it via a scheduled task (see the `windows-scheduled-automation` Hermes skill) so it survives reboots.
+> The relay must be running for the provider port and the browser-tools bridge. `node bridge/install.mjs` installs a watchdog (Windows schtasks / Linux `systemd --user` / macOS launchd) that starts it on boot and revives it if it dies.
 
 ## Repo layout
 
@@ -129,9 +133,9 @@ icons/  manifest.json
 
 - **Branch:** `hermes-bridge` (work happens here; `upstream` = esterhuizen/opensidekick).
 - **No build step** — edit files, reload the extension at `chrome://extensions`.
-- **e2e without Chrome:** `node bridge/test-relay.mjs` (fake extension + real MCP handshake).
+- **Tests:** `npm run check` (syntax, cross-platform) · `npm run test:unit` (9 suites) · `node bridge/test-relay.mjs` (e2e, no Chrome — fake extension + real MCP handshake, plus a real `hermes chat` fallback spawn pinned to the `apollo` profile) · `npm run test:e2e` / `npm run test:rec` (Playwright — **kill the live relay first**, the test's extension instance registers on it) · `npm run test:real` (skips without OPENROUTER_KEY) · `npm run zip` (packaging).
 - **Provider port internals:** `bridge/relay.mjs` → `readHermesProvider()` (default profile → adapter/key mapping → `reachable` flag); extension side in `src/background/relay.js` → `applyHermesProvider()`.
-- The extension targets MV3: the service worker is killed when idle, so `startRelay()` runs at module top level and the conversation persists to `chrome.storage.local` on every turn.
+- The extension targets MV3: the service worker is killed when idle, so `startRelay()` runs at module top level, a 1-minute `apollo-relay-keepalive` alarm self-heals the bridge after idle death, and the conversation persists to `chrome.storage.local` on every turn.
 
 ## License
 

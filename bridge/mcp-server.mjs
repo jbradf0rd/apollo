@@ -32,23 +32,42 @@ function send(obj) {
 
 let ws = null;
 let wsReady = false;
+let connectFailures = 0; // consecutive connect attempts that never reached OPEN
+let clientInitialized = false; // Hermes finished the MCP handshake
 const wsQueue = []; // JSON messages queued until the socket is up
 
 function connectWs() {
   log(`connecting to relay at ${WS_URL}...`);
+  let sock;
   try {
-    ws = new WebSocket(WS_URL);
+    sock = new WebSocket(WS_URL);
   } catch (e) {
     log("WebSocket construction failed:", e.message);
     setTimeout(connectWs, 2000);
     return;
   }
-  ws.onopen = () => {
+  ws = sock;
+  // A stalled handshake (relay restarted mid-connect) must not hang forever:
+  // it leaves tool calls queued and they die with "relay timed out". Force a
+  // retry if the socket isn't open shortly.
+  const stall = setTimeout(() => {
+    if (sock.readyState !== WebSocket.OPEN) {
+      log("relay handshake stalled — forcing retry");
+      try { sock.close(); } catch {}
+    }
+  }, 5000);
+  sock.onopen = () => {
+    clearTimeout(stall);
+    connectFailures = 0;
     log("relay connected");
     wsReady = true;
-    for (const m of wsQueue.splice(0)) ws.send(JSON.stringify(m));
+    for (const m of wsQueue.splice(0)) sock.send(JSON.stringify(m));
+    // Every (re)connect should refresh Hermes's tool list — it may have
+    // missed ext_state broadcasts while we were disconnected, leaving a
+    // stale list after any relay bounce.
+    if (clientInitialized) send({ jsonrpc: "2.0", method: "notifications/tools/list_changed" });
   };
-  ws.onmessage = (ev) => {
+  sock.onmessage = (ev) => {
     let msg;
     try {
       msg = JSON.parse(ev.data);
@@ -57,19 +76,33 @@ function connectWs() {
     }
     if (msg.t === "res") settle(msg.id, msg);
     else if (msg.t === "pong") {/* keepalive reply */}
+    else if (msg.t === "ext_state") {
+      log(`extension ${msg.connected ? "connected" : "disconnected"} (${msg.tools} tools)`);
+      send({ jsonrpc: "2.0", method: "notifications/tools/list_changed" });
+    }
     else log("unexpected relay message:", msg.t);
   };
-  ws.onclose = () => {
+  sock.onclose = () => {
+    clearTimeout(stall);
+    if (ws === sock) ws = null;
     log("relay connection lost");
     wsReady = false;
-    ws = null;
     // Fail any in-flight calls so Hermes doesn't hang forever.
     failAll("relay connection lost");
+    // A long-lived process can get wedged in a connect-error loop (seen in
+    // production: fresh processes connect, the old one keeps failing). After a
+    // few consecutive failures, exit — Hermes respawns a fresh, healthy one.
+    connectFailures++;
+    if (connectFailures >= 5) {
+      log("too many failed connections — exiting so Hermes respawns a fresh process");
+      process.exit(1);
+    }
     setTimeout(connectWs, 1000);
   };
-  ws.onerror = () => {
+  sock.onerror = (ev) => {
+    log("socket error — will retry:", (ev && (ev.message || (ev.error && ev.error.message))) || "no detail");
     try {
-      ws.close();
+      sock.close();
     } catch {}
   };
 }
@@ -114,9 +147,10 @@ async function handleRequest(req) {
   const params = req.params || {};
   switch (method) {
     case "initialize":
+      clientInitialized = true;
       return {
         protocolVersion: PROTOCOL_VERSION,
-        capabilities: { tools: { listChanged: false } },
+        capabilities: { tools: { listChanged: true } },
         serverInfo: { name: "apollo", version: "0.1.0" },
       };
     case "notifications/initialized":
@@ -135,7 +169,7 @@ async function handleRequest(req) {
       const res = await relaySend({ t: "call", name, args });
       if (!res || res.ok === false) {
         return {
-          content: [{ type: "text", text: JSON.stringify({ ok: false, error: (res && res.error) || "tool failed" }) }],
+          content: [{ type: "text", text: JSON.stringify({ ok: false, error: (res && (res.error || (res.result && res.result.error))) || "tool failed" }) }],
           isError: true,
         };
       }
@@ -181,7 +215,7 @@ rl.on("line", (line) => {
   }
   if (req.id === undefined) {
     // Notification — no response required.
-    if (req.method === "notifications/initialized") log("client initialized");
+    if (req.method === "notifications/initialized") { clientInitialized = true; log("client initialized"); }
     return;
   }
   (async () => {
