@@ -15,12 +15,34 @@
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const RELAY = path.join(REPO, "bridge", "relay.mjs");
-const NODE = process.execPath;
+
+// The relay should run under a STABLE node — not Hermes's bundled one, which
+// gets restarted (killing its child processes) every time Hermes updates.
+// Resolution: APOLLO_NODE env > system node (>= 18) > the node running us.
+function pickRelayNode() {
+  if (process.env.APOLLO_NODE) return process.env.APOLLO_NODE;
+  const candidates =
+    process.platform === "win32"
+      ? ["C:\\Program Files\\nodejs\\node.exe", "C:\\Program Files (x86)\\nodejs\\node.exe"]
+      : ["/usr/bin/node", "/usr/local/bin/node", "/opt/homebrew/bin/node"];
+  for (const c of candidates) {
+    if (!existsSync(c)) continue;
+    try {
+      const r = spawnSync(c, ["--version"], { encoding: "utf8" });
+      const major = Number((r.stdout || "").trim().replace(/^v/, "").split(".")[0]);
+      if (r.status === 0 && major >= 18) return c;
+    } catch {
+      /* keep looking */
+    }
+  }
+  return process.execPath;
+}
+const NODE = pickRelayNode();
 const SUP_DIR = path.join(os.homedir(), ".apollo");
 
 // Cross-platform Hermes home (mirrors relay.mjs).
