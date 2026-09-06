@@ -34,6 +34,7 @@ let ws = null;
 let wsReady = false;
 let connectFailures = 0; // consecutive connect attempts that never reached OPEN
 let clientInitialized = false; // Hermes finished the MCP handshake
+let loggedEnv = false; // one-shot env dump on the first socket failure
 const wsQueue = []; // JSON messages queued until the socket is up
 
 function connectWs() {
@@ -101,6 +102,14 @@ function connectWs() {
   };
   sock.onerror = (ev) => {
     log("socket error — will retry:", (ev && (ev.message || (ev.error && ev.error.message))) || "no detail");
+    if (!loggedEnv) {
+      loggedEnv = true;
+      log(
+        "env: node", process.version, "| WS_URL", process.env.APOLLO_WS_URL || "default",
+        "| HTTP_PROXY", process.env.HTTP_PROXY || "-", "| HTTPS_PROXY", process.env.HTTPS_PROXY || "-",
+        "| NO_PROXY", process.env.NO_PROXY || "-", "| NODE_OPTIONS", process.env.NODE_OPTIONS || "-"
+      );
+    }
     try {
       sock.close();
     } catch {}
