@@ -15,7 +15,7 @@ no build step, no runtime dependencies. That makes it easy to hack on.
 
 ```bash
 npm run check   # syntax-checks every JS file as an ES module
-npm run icons   # only if you changed the icon generator
+npm run shots  # regenerate the README screenshots (relay port must be free)
 ```
 
 Please:

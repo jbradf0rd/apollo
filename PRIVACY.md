@@ -7,12 +7,13 @@ backend server operated by the project and collects no analytics or telemetry.
 
 ## What data is handled
 
-- **API keys and settings** you enter are stored locally using
-  `chrome.storage.local`. They never leave your browser except as described
-  below.
+- **Settings** you change are stored locally using
+  `chrome.storage.local`.
+- **API keys** are never stored. The Hermes relay supplies the active
+  model's key in memory only, and it never leaves your browser.
 - **Page content** (text and a map of interactive elements) from the tab you ask
-  the assistant to work on is read on demand and sent **to the LLM provider you
-  configured** so the model can understand and act on the page.
+  the assistant to work on is read on demand and sent **to the LLM provider Hermes has active** (or routed through Hermes when the provider has no portable key)
+  so the model can understand and act on the page.
 - **Your messages** to the assistant are sent to that same provider.
 
 ## Where data goes
@@ -35,10 +36,10 @@ machine at all.
 ## Permissions and why they're needed
 
 - **Host access (`<all_urls>`)**: to read and act on the pages you point the
-  assistant at, and to call the model provider / local endpoint you configure.
+  assistant at, and to call the model provider / local endpoint Hermes has active.
 - **`scripting` / `activeTab` / `tabs`**: to read the current page and perform
   actions across tabs on your behalf.
-- **`storage`**: to save your providers, keys, and preferences locally.
+- **`storage`**: to save your settings and preferences locally.
 - **`sidePanel`**: to show the assistant UI.
 - **`contextMenus` / `notifications`**: right-click actions and status.
 

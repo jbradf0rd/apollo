@@ -1,22 +1,21 @@
 # Dependencies
 node_modules/
 
-# Build artifacts / packaged extension
+# Packaging / build artifacts
 *.zip
 dist/
-web-ext-artifacts/
+*.crx
+*.pem
 
-# Raw (unframed) screenshot intermediates — only the composed 01/02/03 are tracked
-assets/screenshots/raw-*.png
+# Logs and test output
+*.log
+test-results/
+playwright-report/
+coverage/
 
-# Demo recording intermediates — only the composed assets/demo.gif is tracked
-assets/demo-raw/
-assets/demo-frames/
-
-# Local secrets — never commit API keys
-*.local
+# Local secrets — never commit
 .env
-.env.*
+*.local
 secrets.json
 
 # OS / editor cruft
@@ -25,7 +24,3 @@ Thumbs.db
 *.swp
 .idea/
 .vscode/
-
-# Feature-video recording intermediates — only assets/feature-tour.mp4 is tracked
-assets/video-raw/
-apollo.zip
