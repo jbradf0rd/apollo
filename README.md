@@ -11,6 +11,18 @@ Apollo is a Chrome extension that turns your real, logged-in browser into an age
 - **Hermes itself can drive the browser** from any session (desktop, Telegram, cron) through an MCP bridge, using the extension's 17 browser tools as its own hands.
 - **Conversations survive closing the panel — and Chrome.** No more "Claude for Chrome loses context" problem.
 
+## Screenshots
+
+The panel beside the page — a real tool call (✓ `get_page_text`) and the answer, mid-run:
+
+![Apollo beside the page](media/screenshots/05-panel-beside-page.png)
+
+Settings → Model: nothing to configure. Apollo shows the model Hermes is supplying, and follows it automatically:
+
+![Apollo Settings — Model status card](media/screenshots/03-model-card.png)
+
+(`node scripts/screenshots.mjs` regenerates these — deterministic, no personal data. The relay port must be free when it runs.)
+
 ---
 
 ## Why this fork

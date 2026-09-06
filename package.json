@@ -12,6 +12,7 @@
     "test:e2e": "node test/e2e.test.mjs",
     "test:rec": "node test/recording.e2e.mjs",
     "test:real": "node test/real.e2e.mjs",
+    "shots": "node scripts/screenshots.mjs",
     "test": "npm run test:unit",
     "zip": "node scripts/package.mjs"
   },
