@@ -143,7 +143,7 @@ icons/  manifest.json
 
 ## Development
 
-- **Branch:** `hermes-bridge` (work happens here; `upstream` = esterhuizen/opensidekick).
+- **Branch:** `main` (work happens here; `upstream` = esterhuizen/opensidekick).
 - **No build step** — edit files, reload the extension at `chrome://extensions`.
 - **Tests:** `npm run check` (syntax, cross-platform) · `npm run test:unit` (9 suites) · `node bridge/test-relay.mjs` (e2e, no Chrome — fake extension + real MCP handshake, plus a real `hermes chat` fallback spawn pinned to the `apollo` profile) · `npm run test:e2e` / `npm run test:rec` (Playwright — **kill the live relay first**, the test's extension instance registers on it) · `npm run test:real` (skips without OPENROUTER_KEY) · `npm run zip` (packaging).
 - **Provider port internals:** `bridge/relay.mjs` → `readHermesProvider()` (default profile → adapter/key mapping → `reachable` flag); extension side in `src/background/relay.js` → `applyHermesProvider()`.
