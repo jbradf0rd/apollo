@@ -91,7 +91,6 @@ console.log(`Open the Apollo side panel — the relay will connect automatically
 function installWindows() {
   const ps1 = path.join(SUP_DIR, "apollo-relay.ps1");
   const vbs = path.join(SUP_DIR, "apollo-relay-run.vbs");
-  const log = path.join(SUP_DIR, "apollo-relay.log");
 
   const ps1Lines = [
     "# Apollo relay watchdog — idempotent. Safe to run every N minutes.",
@@ -99,7 +98,8 @@ function installWindows() {
     "$node    = '" + psq(NODE) + "'",
     "$relay   = '" + psq(RELAY) + "'",
     "$workdir = '" + psq(REPO) + "'",
-    "$log     = '" + psq(log) + "'",
+    "$logOut  = '" + psq(path.join(SUP_DIR, "apollo-relay.out.log")) + "'",
+    "$logErr  = '" + psq(path.join(SUP_DIR, "apollo-relay.err.log")) + "'",
     "",
     "$listeners = Get-NetTCPConnection -LocalPort 8765 -State Listen",
     "$owners = @($listeners | Select-Object -ExpandProperty OwningProcess -Unique)",
@@ -112,7 +112,7 @@ function installWindows() {
     "Start-Sleep -Seconds 2",
     "Start-Process -FilePath $node -ArgumentList $relay `",
     "  -WorkingDirectory $workdir -WindowStyle Hidden `",
-    "  -RedirectStandardOutput $log -RedirectStandardError $log",
+    "  -RedirectStandardOutput $logOut -RedirectStandardError $logErr",
   ].join("\n");
 
   const vbsLines = [
