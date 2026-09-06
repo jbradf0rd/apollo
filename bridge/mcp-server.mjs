@@ -34,6 +34,7 @@ let ws = null;
 let wsReady = false;
 let connectFailures = 0; // consecutive connect attempts that never reached OPEN
 let clientInitialized = false; // Hermes finished the MCP handshake
+let everConnected = false; // relay WS has been up at least once (reconnect gate)
 let loggedEnv = false; // one-shot env dump on the first socket failure
 const wsQueue = []; // JSON messages queued until the socket is up
 
@@ -63,10 +64,12 @@ function connectWs() {
     log("relay connected");
     wsReady = true;
     for (const m of wsQueue.splice(0)) sock.send(JSON.stringify(m));
-    // Every (re)connect should refresh Hermes's tool list — it may have
-    // missed ext_state broadcasts while we were disconnected, leaving a
-    // stale list after any relay bounce.
-    if (clientInitialized) send({ jsonrpc: "2.0", method: "notifications/tools/list_changed" });
+    // Refresh Hermes's tool list on RE-connects only — it may have missed
+    // ext_state broadcasts while we were down. Announcing during the INITIAL
+    // handshake corrupts it: Hermes kills the child when a list_changed
+    // arrives before its first tools/list completes.
+    if (everConnected && clientInitialized) send({ jsonrpc: "2.0", method: "notifications/tools/list_changed" });
+    everConnected = true;
   };
   sock.onmessage = (ev) => {
     let msg;
@@ -156,7 +159,6 @@ async function handleRequest(req) {
   const params = req.params || {};
   switch (method) {
     case "initialize":
-      clientInitialized = true;
       return {
         protocolVersion: PROTOCOL_VERSION,
         capabilities: { tools: { listChanged: true } },
